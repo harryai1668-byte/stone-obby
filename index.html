@@ -3,94 +3,66 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Stone Obby</title>
 
 <style>
-* {
-    box-sizing: border-box;
+*{box-sizing:border-box}
+html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#87ceeb;
+    font-family:Arial,sans-serif;
+}
+canvas{display:block}
+
+#ui{
+    position:fixed;
+    top:15px;
+    left:15px;
+    z-index:10;
+    padding:12px 16px;
+    color:white;
+    background:rgba(0,0,0,.65);
+    border-radius:12px;
+    font-size:18px;
+    line-height:1.5;
 }
 
-html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    font-family: Arial, sans-serif;
-    background: #87ceeb;
+#help{
+    position:fixed;
+    bottom:15px;
+    left:15px;
+    z-index:10;
+    color:white;
+    background:rgba(0,0,0,.6);
+    padding:10px 14px;
+    border-radius:10px;
 }
 
-canvas {
-    display: block;
+#win{
+    display:none;
+    position:fixed;
+    inset:0;
+    z-index:20;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    background:rgba(0,0,0,.7);
+    color:white;
 }
 
-#ui {
-    position: fixed;
-    top: 15px;
-    left: 15px;
-    z-index: 10;
-
-    padding: 14px 18px;
-
-    background: rgba(20, 30, 40, 0.8);
-    color: white;
-
-    border-radius: 12px;
-
-    font-size: 18px;
-    line-height: 1.5;
-
-    user-select: none;
+#win h1{
+    font-size:55px;
+    margin:0 0 20px;
 }
 
-#help {
-    position: fixed;
-    bottom: 15px;
-    left: 15px;
-
-    z-index: 10;
-
-    background: rgba(20,30,40,.75);
-    color: white;
-
-    padding: 10px 14px;
-    border-radius: 10px;
-
-    font-size: 14px;
-}
-
-#win {
-    display: none;
-
-    position: fixed;
-    inset: 0;
-
-    z-index: 20;
-
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-
-    background: rgba(0,0,0,.7);
-
-    color: white;
-}
-
-#win h1 {
-    font-size: 55px;
-    margin: 0 0 20px;
-}
-
-#win button {
-    border: none;
-    border-radius: 10px;
-
-    padding: 12px 25px;
-
-    font-size: 20px;
-
-    cursor: pointer;
+#win button{
+    border:0;
+    border-radius:10px;
+    padding:12px 25px;
+    font-size:20px;
 }
 </style>
 </head>
@@ -98,13 +70,13 @@ canvas {
 <body>
 
 <div id="ui">
-    🪨 <b>STONE OBBY</b><br>
-    💀 Chết: <span id="deaths">0</span><br>
-    🚩 Stage: <span id="stage">1</span>
+🪨 <b>STONE OBBY</b><br>
+💀 Chết: <span id="deaths">0</span><br>
+🚩 Stage: <span id="stage">1</span>
 </div>
 
 <div id="help">
-    W A S D = Di chuyển &nbsp; | &nbsp; SPACE = Nhảy
+W A S D = Di chuyển &nbsp; | &nbsp; SPACE = Nhảy
 </div>
 
 <div id="win">
@@ -112,454 +84,278 @@ canvas {
     <button onclick="location.reload()">Chơi lại</button>
 </div>
 
-
 <script type="module">
 
 import * as THREE from
 "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
 
-// ==================================================
+// ================================
 // SCENE
-// ==================================================
+// ================================
 
 const scene = new THREE.Scene();
 
 scene.background =
-    new THREE.Color(0x87ceeb);
+new THREE.Color(0x87ceeb);
 
 scene.fog =
-    new THREE.Fog(
-        0x87ceeb,
-        40,
-        180
-    );
-
-
-// ==================================================
-// CAMERA
-// ==================================================
-
-const camera =
-    new THREE.PerspectiveCamera(
-        70,
-        window.innerWidth /
-        window.innerHeight,
-        0.1,
-        500
-    );
-
-camera.position.set(
-    0,
-    7,
-    13
+new THREE.Fog(
+    0x87ceeb,
+    35,
+    180
 );
 
 
-// ==================================================
+// ================================
+// CAMERA
+// ================================
+
+const camera =
+new THREE.PerspectiveCamera(
+    70,
+    innerWidth / innerHeight,
+    0.1,
+    500
+);
+
+
+// ================================
 // RENDERER
-// ==================================================
+// ================================
 
 const renderer =
-    new THREE.WebGLRenderer({
-        antialias: true
-    });
+new THREE.WebGLRenderer({
+    antialias:true
+});
 
 renderer.setSize(
-    window.innerWidth,
-    window.innerHeight
+    innerWidth,
+    innerHeight
 );
 
 renderer.setPixelRatio(
-    Math.min(window.devicePixelRatio, 2)
+    Math.min(devicePixelRatio,2)
 );
 
 renderer.shadowMap.enabled = true;
-
-renderer.shadowMap.type =
-    THREE.PCFSoftShadowMap;
 
 document.body.appendChild(
     renderer.domElement
 );
 
 
-// ==================================================
+// ================================
 // LIGHT
-// ==================================================
+// ================================
 
-const sunlight =
-    new THREE.DirectionalLight(
-        0xffffff,
-        2
-    );
-
-sunlight.position.set(
-    30,
-    50,
-    20
+const sun =
+new THREE.DirectionalLight(
+    0xffffff,
+    2
 );
 
-sunlight.castShadow = true;
+sun.position.set(
+    30,50,20
+);
 
-scene.add(sunlight);
+sun.castShadow = true;
 
+scene.add(sun);
 
-const ambient =
+scene.add(
     new THREE.HemisphereLight(
         0xffffff,
-        0x668866,
-        1.5
+        0x557755,
+        1.4
+    )
+);
+
+
+// ================================
+// MATERIAL
+// ================================
+
+const stone =
+new THREE.MeshStandardMaterial({
+    color:0x777777,
+    roughness:1
+});
+
+const grass =
+new THREE.MeshStandardMaterial({
+    color:0x4d963f,
+    roughness:1
+});
+
+const skin =
+new THREE.MeshStandardMaterial({
+    color:0xffc28b
+});
+
+const shirt =
+new THREE.MeshStandardMaterial({
+    color:0x2979ff
+});
+
+
+// ================================
+// PLATFORM
+// ================================
+
+const platforms=[];
+
+function platform(
+    x,y,z,w,d
+){
+
+    const rock =
+    new THREE.Mesh(
+        new THREE.BoxGeometry(
+            w,1,d
+        ),
+        stone
     );
 
-scene.add(ambient);
+    rock.position.set(
+        x,y,z
+    );
+
+    rock.castShadow=true;
+    rock.receiveShadow=true;
+
+    scene.add(rock);
+
+    platforms.push(rock);
 
 
-// ==================================================
-// MATERIALS
-// ==================================================
+    const grassTop =
+    new THREE.Mesh(
+        new THREE.BoxGeometry(
+            w+.1,
+            .2,
+            d+.1
+        ),
+        grass
+    );
 
-const grassMat =
-    new THREE.MeshStandardMaterial({
-        color: 0x4f9b45,
-        roughness: 1
-    });
-
-const stoneMat =
-    new THREE.MeshStandardMaterial({
-        color: 0x777777,
-        roughness: 1
-    });
-
-const dirtMat =
-    new THREE.MeshStandardMaterial({
-        color: 0x70452b,
-        roughness: 1
-    });
-
-const woodMat =
-    new THREE.MeshStandardMaterial({
-        color: 0x8b5a2b,
-        roughness: 1
-    });
-
-
-// ==================================================
-// PLATFORMS
-// ==================================================
-
-const platforms = [];
-
-function makePlatform(
-    x,
-    y,
-    z,
-    width,
-    depth
-) {
-
-    // Đất
-
-    const dirt =
-        new THREE.Mesh(
-            new THREE.BoxGeometry(
-                width,
-                1.2,
-                depth
-            ),
-            stoneMat
-        );
-
-    dirt.position.set(
+    grassTop.position.set(
         x,
-        y,
+        y+.6,
         z
     );
 
-    dirt.castShadow = true;
-    dirt.receiveShadow = true;
+    grassTop.receiveShadow=true;
 
-    scene.add(dirt);
-
-    platforms.push(dirt);
-
-
-    // Cỏ trên mặt
-
-    const grass =
-        new THREE.Mesh(
-            new THREE.BoxGeometry(
-                width + 0.05,
-                0.25,
-                depth + 0.05
-            ),
-            grassMat
-        );
-
-    grass.position.set(
-        x,
-        y + 0.72,
-        z
-    );
-
-    grass.receiveShadow = true;
-
-    scene.add(grass);
-
-
-    return dirt;
+    scene.add(grassTop);
 }
 
 
-// ==================================================
+// ================================
 // MAP
-// ==================================================
+// ================================
 
-// Spawn
+platform(0,0,0,10,10);
 
-makePlatform(
-    0,
-    0,
-    0,
-    10,
-    10
-);
+platform(0,1.5,-8,5,5);
+platform(4,3,-15,5,5);
+platform(-2,4.5,-22,5,5);
+platform(-7,6,-29,5,5);
+platform(0,7.5,-36,6,6);
+platform(7,9,-43,5,5);
+platform(3,10.5,-50,5,5);
+platform(-5,12,-57,6,6);
+platform(-10,13.5,-65,6,6);
+platform(-3,15,-73,7,7);
 
-
-// Các bậc đá
-
-makePlatform(
-    0,
-    1.5,
-    -8,
-    5,
-    5
-);
-
-makePlatform(
-    4,
-    3,
-    -15,
-    5,
-    5
-);
-
-makePlatform(
-    -2,
-    4.5,
-    -22,
-    5,
-    5
-);
-
-makePlatform(
-    -7,
-    6,
-    -29,
-    5,
-    5
-);
-
-makePlatform(
-    0,
-    7.5,
-    -36,
-    6,
-    6
-);
-
-makePlatform(
-    7,
-    9,
-    -43,
-    5,
-    5
-);
-
-makePlatform(
-    3,
-    10.5,
-    -50,
-    5,
-    5
-);
-
-makePlatform(
-    -5,
-    12,
-    -57,
-    6,
-    6
-);
-
-makePlatform(
-    -10,
-    13.5,
-    -65,
-    6,
-    6
-);
-
-makePlatform(
-    -3,
-    15,
-    -73,
-    7,
-    7
-);
+platform(5,16.5,-83,10,10);
 
 
-// ==================================================
+// ================================
 // FINISH
-// ==================================================
-
-makePlatform(
-    5,
-    16.5,
-    -83,
-    10,
-    10
-);
-
-
-// ==================================================
-// FINISH FLAG
-// ==================================================
+// ================================
 
 const pole =
-    new THREE.Mesh(
-        new THREE.CylinderGeometry(
-            0.15,
-            0.15,
-            6
-        ),
-        woodMat
-    );
-
-pole.position.set(
-    5,
-    20,
-    -83
+new THREE.Mesh(
+    new THREE.CylinderGeometry(
+        .15,.15,6
+    ),
+    new THREE.MeshStandardMaterial({
+        color:0x70452b
+    })
 );
 
-pole.castShadow = true;
+pole.position.set(
+    5,20,-83
+);
 
 scene.add(pole);
 
-
 const flag =
-    new THREE.Mesh(
-        new THREE.BoxGeometry(
-            3,
-            1.6,
-            0.1
-        ),
-        new THREE.MeshStandardMaterial({
-            color: 0xff3333
-        })
-    );
+new THREE.Mesh(
+    new THREE.BoxGeometry(
+        3,1.5,.1
+    ),
+    new THREE.MeshStandardMaterial({
+        color:0xff3333
+    })
+);
 
 flag.position.set(
-    6.4,
-    21.5,
-    -83
+    6.4,21.5,-83
 );
 
 scene.add(flag);
 
 
-// ==================================================
+// ================================
 // PLAYER
-// ==================================================
+// ================================
 
 const player =
-    new THREE.Group();
+new THREE.Group();
 
 
-// Body
+// BODY
 
 const body =
-    new THREE.Mesh(
-        new THREE.BoxGeometry(
-            1.2,
-            1.8,
-            0.7
-        ),
-        new THREE.MeshStandardMaterial({
-            color: 0x3366ff
-        })
-    );
+new THREE.Mesh(
+    new THREE.BoxGeometry(
+        1.2,1.8,.7
+    ),
+    shirt
+);
 
-body.position.y = 1;
+body.position.y=1;
 
-body.castShadow = true;
+body.castShadow=true;
 
 player.add(body);
 
 
-// Head
+// HEAD
 
 const head =
-    new THREE.Mesh(
-        new THREE.BoxGeometry(
-            1,
-            1,
-            1
-        ),
-        new THREE.MeshStandardMaterial({
-            color: 0xffc28b
-        })
-    );
+new THREE.Mesh(
+    new THREE.BoxGeometry(
+        1,1,1
+    ),
+    skin
+);
 
-head.position.y = 2.4;
+head.position.y=2.4;
 
-head.castShadow = true;
+head.castShadow=true;
 
 player.add(head);
 
 
-// Mắt
-
-const eyeMat =
-    new THREE.MeshBasicMaterial({
-        color: 0x111111
-    });
-
-const eye1 =
-    new THREE.Mesh(
-        new THREE.BoxGeometry(
-            0.12,
-            0.12,
-            0.05
-        ),
-        eyeMat
-    );
-
-eye1.position.set(
-    -0.2,
-    2.5,
-    -0.48
-);
-
-player.add(eye1);
-
-
-const eye2 =
-    eye1.clone();
-
-eye2.position.x = 0.2;
-
-player.add(eye2);
-
-
-// Spawn
+// SPAWN
 
 const spawn =
-    new THREE.Vector3(
-        0,
-        0.75,
-        0
-    );
+new THREE.Vector3(
+    0,0.75,0
+);
 
 player.position.copy(
     spawn
@@ -568,141 +364,170 @@ player.position.copy(
 scene.add(player);
 
 
-// ==================================================
+// ================================
 // PHYSICS
-// ==================================================
+// ================================
 
-let velocityY = 0;
+let velocityY=0;
 
-const gravity = -0.045;
+const gravity=-0.045;
 
-const jumpPower = 0.9;
+const jumpPower=.9;
 
-let grounded = false;
+let grounded=false;
 
 
-// ==================================================
-// CONTROLS
-// ==================================================
+// ================================
+// INPUT
+// ================================
 
-const keys = {};
+const keys={
+    w:false,
+    a:false,
+    s:false,
+    d:false
+};
+
 
 window.addEventListener(
-    "keydown",
-    function(e) {
+"keydown",
+e=>{
 
-        keys[e.key.toLowerCase()] =
-            true;
+    const k=e.key.toLowerCase();
 
-        if (
-            e.code === "Space" &&
-            grounded
-        ) {
+    if(
+        k==="w" ||
+        k==="a" ||
+        k==="s" ||
+        k==="d"
+    ){
 
-            velocityY =
-                jumpPower;
+        keys[k]=true;
 
-            grounded = false;
+        e.preventDefault();
+    }
+
+
+    if(e.code==="Space"){
+
+        e.preventDefault();
+
+        if(grounded){
+
+            velocityY=
+            jumpPower;
+
+            grounded=false;
         }
     }
-);
+});
 
 
 window.addEventListener(
-    "keyup",
-    function(e) {
+"keyup",
+e=>{
 
-        keys[e.key.toLowerCase()] =
-            false;
+    const k=
+    e.key.toLowerCase();
+
+    if(
+        k==="w" ||
+        k==="a" ||
+        k==="s" ||
+        k==="d"
+    ){
+
+        keys[k]=false;
     }
-);
+});
 
 
-// ==================================================
-// DEATH
-// ==================================================
+// QUAN TRỌNG:
+// Khi click ra ngoài game,
+// tất cả phím được thả.
 
-let deaths = 0;
+window.addEventListener(
+"blur",
+()=>{
 
-function respawn() {
+    keys.w=false;
+    keys.a=false;
+    keys.s=false;
+    keys.d=false;
+});
+
+
+// ================================
+// RESPAWN
+// ================================
+
+let deaths=0;
+
+function respawn(){
 
     deaths++;
 
     document.getElementById(
         "deaths"
-    ).textContent = deaths;
+    ).textContent=deaths;
 
     player.position.copy(
         spawn
     );
 
-    velocityY = 0;
+    velocityY=0;
 }
 
 
-// ==================================================
+// ================================
 // COLLISION
-// ==================================================
+// ================================
 
-function collision() {
+function checkCollision(){
 
-    grounded = false;
+    grounded=false;
 
-    const playerX =
+    for(
+        const p of platforms
+    ){
+
+        const box =
+        new THREE.Box3()
+        .setFromObject(p);
+
+        const x =
         player.position.x;
 
-    const playerZ =
+        const z =
         player.position.z;
 
-    const playerY =
+        const y =
         player.position.y;
 
 
-    for (
-        const platform of platforms
-    ) {
-
-        const box =
-            new THREE.Box3()
-                .setFromObject(
-                    platform
-                );
-
-
         const insideX =
-            playerX >
-                box.min.x - 0.6 &&
-            playerX <
-                box.max.x + 0.6;
-
+        x > box.min.x-.55 &&
+        x < box.max.x+.55;
 
         const insideZ =
-            playerZ >
-                box.min.z - 0.6 &&
-            playerZ <
-                box.max.z + 0.6;
+        z > box.min.z-.55 &&
+        z < box.max.z+.55;
 
 
-        const platformTop =
-            box.max.y;
-
-
-        if (
+        if(
             insideX &&
             insideZ &&
-            playerY >=
-                platformTop - 0.4 &&
-            playerY <=
-                platformTop + 0.7 &&
-            velocityY <= 0
-        ) {
+            y >= box.max.y-.4 &&
+            y <= box.max.y+.8 &&
+            velocityY<=0
+        ){
 
-            player.position.y =
-                platformTop;
+            player.position.y=
+            box.max.y;
 
-            velocityY = 0;
+            velocityY=0;
 
-            grounded = true;
+            grounded=true;
 
             break;
         }
@@ -710,136 +535,144 @@ function collision() {
 }
 
 
-// ==================================================
-// PLAYER UPDATE
-// ==================================================
+// ================================
+// PLAYER MOVEMENT
+// ================================
 
-function updatePlayer() {
+function updatePlayer(){
 
-    const speed = 0.18;
-
-
-    if (keys["w"]) {
-        player.position.z -= speed;
-    }
-
-    if (keys["s"]) {
-        player.position.z += speed;
-    }
-
-    if (keys["a"]) {
-        player.position.x -= speed;
-    }
-
-    if (keys["d"]) {
-        player.position.x += speed;
-    }
+    const speed=.18;
 
 
-    // Gravity
+    // Chỉ di chuyển khi đang bấm phím
 
-    velocityY += gravity;
+    if(keys.w)
+        player.position.z-=speed;
 
-    player.position.y +=
-        velocityY;
+    if(keys.s)
+        player.position.z+=speed;
+
+    if(keys.a)
+        player.position.x-=speed;
+
+    if(keys.d)
+        player.position.x+=speed;
 
 
-    // Collision
+    // GRAVITY
 
-    collision();
+    velocityY+=gravity;
+
+    player.position.y+=
+    velocityY;
 
 
-    // Rơi khỏi map
+    // COLLISION
 
-    if (
+    checkCollision();
+
+
+    // RƠI
+
+    if(
         player.position.y < -12
-    ) {
+    ){
 
         respawn();
     }
 
 
-    // Finish
+    // FINISH
 
-    if (
+    if(
         player.position.z < -78 &&
         player.position.y > 15
-    ) {
+    ){
 
         document.getElementById(
             "win"
-        ).style.display = "flex";
+        ).style.display="flex";
     }
 }
 
 
-// ==================================================
+// ================================
 // CAMERA
-// ==================================================
+// ================================
 
-function updateCamera() {
+function updateCamera(){
 
-    const targetX =
-        player.position.x;
+    const targetX=
+    player.position.x;
 
-    const targetY =
-        player.position.y + 6;
+    const targetY=
+    player.position.y+5;
 
-    const targetZ =
-        player.position.z + 11;
+    const targetZ=
+    player.position.z+10;
 
 
     camera.position.x +=
-        (targetX -
-        camera.position.x) * 0.08;
+    (
+        targetX-
+        camera.position.x
+    )*.1;
+
 
     camera.position.y +=
-        (targetY -
-        camera.position.y) * 0.08;
+    (
+        targetY-
+        camera.position.y
+    )*.1;
+
 
     camera.position.z +=
-        (targetZ -
-        camera.position.z) * 0.08;
+    (
+        targetZ-
+        camera.position.z
+    )*.1;
 
 
     camera.lookAt(
         player.position.x,
-        player.position.y + 1,
-        player.position.z - 4
+        player.position.y+1,
+        player.position.z-3
     );
 }
 
 
-// ==================================================
+// ================================
 // RESIZE
-// ==================================================
+// ================================
 
 window.addEventListener(
-    "resize",
-    function() {
+"resize",
+()=>{
 
-        camera.aspect =
-            window.innerWidth /
-            window.innerHeight;
+    camera.aspect=
+    innerWidth/innerHeight;
 
-        camera.updateProjectionMatrix();
+    camera.updateProjectionMatrix();
 
-        renderer.setSize(
-            window.innerWidth,
-            window.innerHeight
-        );
-    }
+    renderer.setSize(
+        innerWidth,
+        innerHeight
+    );
+});
+
+
+// ================================
+// START
+// ================================
+
+camera.position.set(
+    0,6,11
 );
 
-
-// ==================================================
-// GAME LOOP
-// ==================================================
-
-function gameLoop() {
+function animate(){
 
     requestAnimationFrame(
-        gameLoop
+        animate
     );
 
     updatePlayer();
@@ -852,7 +685,7 @@ function gameLoop() {
     );
 }
 
-gameLoop();
+animate();
 
 </script>
 
