@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Stone Obby</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        overflow: hidden;
+        font-family: Arial, sans-serif;
+        background: #87ceeb;
+    }
+
+    #ui {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        z-index: 10;
+        color: white;
+        background: rgba(0,0,0,.55);
+        padding: 15px 20px;
+        border-radius: 12px;
+        font-size: 18px;
+    }
+
+    #finish {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: rgba(0,0,0,.65);
+        color: white;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        font-size: 40px;
+    }
+
+    #finish button {
+        margin-top: 20px;
+        padding: 12px 25px;
+        font-size: 20px;
+        border: 0;
+        border-radius: 10px;
+        cursor: pointer;
+    }
+</style>
+</head>
+
+<body>
+
+<div id="ui">
+    🪨 Stone Obby<br>
+    Deaths: <span id="deaths">0</span><br>
+    Stage: <span id="stage">1</span>
+</div>
+
+<div id="finish">
+    🏆 YOU WIN!
+    <button onclick="location.reload()">Play Again</button>
+</div>
+
+<script type="module">
+
+import * as THREE from
+'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+import { OrbitControls } from
+'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+
+
+// ==========================
+// SCENE
+// ==========================
+
+const scene = new THREE.Scene();
+
+scene.background = new THREE.Color(0x87ceeb);
+
+scene.fog = new THREE.Fog(
+    0x87ceeb,
+    30,
+    150
+);
+
+
+// ==========================
+// CAMERA
+// ==========================
+
+const camera = new THREE.PerspectiveCamera(
+    70,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    500
+);
+
+camera.position.set(0, 7, 10);
+
+
+// ==========================
+// RENDERER
+// ==========================
+
+const renderer = new THREE.WebGLRenderer({
+    antialias: true
+});
+
+renderer.setSize(
+    window.innerWidth,
+    window.innerHeight
+);
+
+renderer.shadowMap.enabled = true;
+
+document.body.appendChild(renderer.domElement);
+
+
+// ==========================
+// LIGHT
+// ==========================
+
+const sun = new THREE.DirectionalLight(
+    0xffffff,
+    2
+);
+
+sun.position.set(
+    20,
+    40,
+    20
+);
+
+sun.castShadow = true;
+
+scene.add(sun);
+
+
+const ambient = new THREE.AmbientLight(
+    0xffffff,
+    0.6
+);
+
+scene.add(ambient);
+
+
+// ==========================
+// MATERIALS
+// ==========================
+
+const grassMaterial = new THREE.MeshStandardMaterial({
+    color: 0x4f8f3a
+});
+
+const stoneMaterial = new THREE.MeshStandardMaterial({
+    color: 0x777777,
+    roughness: 1
+});
+
+const dirtMaterial = new THREE.MeshStandardMaterial({
+    color: 0x70452b,
+    roughness: 1
+});
+
+const playerMaterial = new THREE.MeshStandardMaterial({
+    color: 0x3366ff
+});
+
+
+// ==========================
+// PLATFORM FUNCTION
+// ==========================
+
+function createPlatform(
+    x,
+    y,
+    z,
+    width = 5,
+    height = 1,
+    depth = 5
+) {
+
+    const geometry =
+        new THREE.BoxGeometry(
+            width,
+            height,
+            depth
+        );
+
+    const platform =
+        new THREE.Mesh(
+            geometry,
+            stoneMaterial
+        );
+
+    platform.position.set(
+        x,
+        y,
+        z
+    );
+
+    platform.castShadow = true;
+    platform.receiveShadow = true;
+
+    scene.add(platform);
+
+    platforms.push(platform);
+
+    return platform;
+}
+
+
+// ==========================
+// PLATFORMS
+// ==========================
+
+const platforms = [];
+
+
+// SPAWN PLATFORM
+createPlatform(
+    0,
+    0,
+    0,
+    10,
+    1,
+    10
+);
+
+
+// BƯỚC ĐÁ
+createPlatform(0, 1, -8, 5, 1, 5);
+
+createPlatform(4, 2, -15, 5, 1, 5);
+
+createPlatform(-2, 3, -22, 5, 1, 5);
+
+createPlatform(-7, 4, -29, 5, 1, 5);
+
+createPlatform(0, 5, -36, 6, 1, 6);
+
+createPlatform(7, 6, -43, 5, 1, 5);
+
+createPlatform(3, 7, -50, 5, 1, 5);
+
+createPlatform(-5, 8, -57, 6, 1, 6);
+
+createPlatform(-10, 9, -65, 6, 1, 6);
+
+createPlatform(-3, 10, -73, 7, 1, 7);
+
+
+// ==========================
+// FINISH PLATFORM
+// ==========================
+
+const finishPlatform =
+    createPlatform(
+        5,
+        11,
+        -82,
+        10,
+        1,
+        10
+    );
+
+
+// ==========================
+// FINISH FLAG
+// ==========================
+
+const poleGeometry =
+    new THREE.CylinderGeometry(
+        0.15,
+        0.15,
+        5
+    );
+
+const pole =
+    new THREE.Mesh(
+        poleGeometry,
+        dirtMaterial
+    );
+
+pole.position.set(
+    5,
+    13.5,
+    -82
+);
+
+scene.add(pole);
+
+
+const flagGeometry =
+    new THREE.BoxGeometry(
+        3,
+        1.5,
+        0.1
+    );
+
+const flagMaterial =
+    new THREE.MeshStandardMaterial({
+        color: 0xff3333
+    });
+
+const flag =
+    new THREE.Mesh(
+        flagGeometry,
+        flagMaterial
+    );
+
+flag.position.set(
+    6.4,
+    15,
+    -82
+);
+
+scene.add(flag);
+
+
+// ==========================
+// PLAYER
+// ==========================
+
+const player = new THREE.Group();
+
+
+// BODY
+const body =
+    new THREE.Mesh(
+        new THREE.BoxGeometry(
+            1.2,
+            1.8,
+            0.7
+        ),
+        playerMaterial
+    );
+
+body.position.y = 1;
+
+body.castShadow = true;
+
+player.add(body);
+
+
+// HEAD
+const head =
+    new THREE.Mesh(
+        new THREE.BoxGeometry(
+            1,
+            1,
+            1
+        ),
+        new THREE.MeshStandardMaterial({
+            color: 0xffcc99
+        })
+    );
+
+head.position.y = 2.4;
+
+head.castShadow = true;
+
+player.add(head);
+
+
+// SPAWN POSITION
+const spawnPosition =
+    new THREE.Vector3(
+        0,
+        1,
+        0
+    );
+
+player.position.copy(
+    spawnPosition
+);
+
+scene.add(player);
+
+
+// ==========================
+// PHYSICS
+// ==========================
+
+let velocityY = 0;
+
+let gravity = -0.035;
+
+let jumpPower = 0.75;
+
+let onGround = false;
+
+
+// ==========================
+// CONTROLS
+// ==========================
+
+const keys = {};
+
+window.addEventListener(
+    "keydown",
+    e => {
+        keys[e.key.toLowerCase()] = true;
+
+        if (
+            e.code === "Space" &&
+            onGround
+        ) {
+            velocityY = jumpPower;
+            onGround = false;
+        }
+    }
+);
+
+window.addEventListener(
+    "keyup",
+    e => {
+        keys[e.key.toLowerCase()] = false;
+    }
+);
+
+
+// ==========================
+// DEATH SYSTEM
+// ==========================
+
+let deaths = 0;
+
+function respawn() {
+
+    deaths++;
+
+    document.getElementById(
+        "deaths"
+    ).textContent = deaths;
+
+    player.position.copy(
+        spawnPosition
+    );
+
+    velocityY = 0;
+}
+
+
+// ==========================
+// COLLISION
+// ==========================
+
+function checkPlatformCollision() {
+
+    onGround = false;
+
+    const playerBottom =
+        player.position.y;
+
+    for (
+        const platform of platforms
+    ) {
+
+        const box =
+            new THREE.Box3()
+                .setFromObject(platform);
+
+        const insideX =
+            player.position.x >
+                box.min.x - 0.5 &&
+            player.position.x <
+                box.max.x + 0.5;
+
+        const insideZ =
+            player.position.z >
+                box.min.z - 0.5 &&
+            player.position.z <
+                box.max.z + 0.5;
+
+        const touchingTop =
+            playerBottom >=
+                box.max.y - 0.15 &&
+            playerBottom <=
+                box.max.y + 0.5;
+
+        if (
+            insideX &&
+            insideZ &&
+            touchingTop &&
+            velocityY <= 0
+        ) {
+
+            player.position.y =
+                box.max.y;
+
+            velocityY = 0;
+
+            onGround = true;
+        }
+    }
+}
+
+
+// ==========================
+// FINISH CHECK
+// ==========================
+
+function checkFinish() {
+
+    if (
+        player.position.z <
+        -78 &&
+        player.position.y >
+        10
+    ) {
+
+        document.getElementById(
+            "finish"
+        ).style.display = "flex";
+    }
+}
+
+
+// ==========================
+// UPDATE PLAYER
+// ==========================
+
+function updatePlayer() {
+
+    const speed = 0.16;
+
+    if (keys["w"]) {
+        player.position.z -= speed;
+    }
+
+    if (keys["s"]) {
+        player.position.z += speed;
+    }
+
+    if (keys["a"]) {
+        player.position.x -= speed;
+    }
+
+    if (keys["d"]) {
+        player.position.x += speed;
+    }
+
+
+    // gravity
+
+    velocityY += gravity;
+
+    player.position.y += velocityY;
+
+
+    // collision
+
+    checkPlatformCollision();
+
+
+    // fell off map
+
+    if (
+        player.position.y < -15
+    ) {
+
+        respawn();
+    }
+
+
+    checkFinish();
+}
+
+
+// ==========================
+// CAMERA FOLLOW
+// ==========================
+
+function updateCamera() {
+
+    const target =
+        new THREE.Vector3(
+            player.position.x,
+            player.position.y + 3,
+            player.position.z + 7
+        );
+
+    camera.position.lerp(
+        target,
+        0.08
+    );
+
+    camera.lookAt(
+        player.position.x,
+        player.position.y + 1,
+        player.position.z - 3
+    );
+}
+
+
+// ==========================
+// RESIZE
+// ==========================
+
+window.addEventListener(
+    "resize",
+    () => {
+
+        camera.aspect =
+            window.innerWidth /
+            window.innerHeight;
+
+        camera.updateProjectionMatrix();
+
+        renderer.setSize(
+            window.innerWidth,
+            window.innerHeight
+        );
+    }
+);
+
+
+// ==========================
+// GAME LOOP
+// ==========================
+
+function animate() {
+
+    requestAnimationFrame(
+        animate
+    );
+
+    updatePlayer();
+
+    updateCamera();
+
+    renderer.render(
+        scene,
+        camera
+    );
+}
+
+animate();
+
+</script>
+
+</body>
+</html>
