@@ -2,68 +2,187 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
 <title>Stone Obby</title>
 
 <style>
-*{box-sizing:border-box}
+*{
+    box-sizing:border-box;
+    -webkit-tap-highlight-color:transparent;
+}
+
 html,body{
     margin:0;
     width:100%;
     height:100%;
     overflow:hidden;
-    background:#87ceeb;
+    touch-action:none;
     font-family:Arial,sans-serif;
+    background:#87ceeb;
 }
-canvas{display:block}
+
+canvas{
+    display:block;
+}
 
 #ui{
     position:fixed;
-    top:15px;
-    left:15px;
+    top:12px;
+    left:12px;
     z-index:10;
-    padding:12px 16px;
+
+    padding:10px 14px;
+
     color:white;
     background:rgba(0,0,0,.65);
+
     border-radius:12px;
-    font-size:18px;
-    line-height:1.5;
+
+    font-size:17px;
+    line-height:1.45;
+
+    user-select:none;
 }
 
 #help{
     position:fixed;
-    bottom:15px;
-    left:15px;
+    bottom:12px;
+    left:50%;
+    transform:translateX(-50%);
+
     z-index:10;
+
     color:white;
     background:rgba(0,0,0,.6);
-    padding:10px 14px;
+
+    padding:8px 13px;
     border-radius:10px;
+
+    font-size:13px;
+}
+
+#mobileControls{
+    display:none;
+
+    position:fixed;
+    inset:0;
+
+    z-index:15;
+
+    pointer-events:none;
+}
+
+/* JOYSTICK */
+
+#joystick{
+    position:absolute;
+
+    left:25px;
+    bottom:30px;
+
+    width:125px;
+    height:125px;
+
+    border-radius:50%;
+
+    background:rgba(255,255,255,.20);
+
+    border:2px solid rgba(255,255,255,.4);
+
+    pointer-events:auto;
+}
+
+#stick{
+    position:absolute;
+
+    width:55px;
+    height:55px;
+
+    left:33px;
+    top:33px;
+
+    border-radius:50%;
+
+    background:rgba(255,255,255,.65);
+}
+
+
+/* JUMP */
+
+#jump{
+    position:absolute;
+
+    right:30px;
+    bottom:45px;
+
+    width:90px;
+    height:90px;
+
+    border-radius:50%;
+
+    border:2px solid rgba(255,255,255,.5);
+
+    background:rgba(50,150,255,.65);
+
+    color:white;
+
+    font-size:18px;
+    font-weight:bold;
+
+    pointer-events:auto;
+
+    user-select:none;
 }
 
 #win{
     display:none;
+
     position:fixed;
     inset:0;
-    z-index:20;
+
+    z-index:30;
+
     align-items:center;
     justify-content:center;
+
     flex-direction:column;
-    background:rgba(0,0,0,.7);
+
+    background:rgba(0,0,0,.72);
+
     color:white;
 }
 
 #win h1{
-    font-size:55px;
+    font-size:48px;
     margin:0 0 20px;
 }
 
 #win button{
     border:0;
     border-radius:10px;
-    padding:12px 25px;
+
+    padding:12px 24px;
+
     font-size:20px;
 }
+
+
+/* MOBILE */
+
+@media (max-width:800px){
+
+    #mobileControls{
+        display:block;
+    }
+
+    #help{
+        display:none;
+    }
+
+}
+
 </style>
 </head>
 
@@ -79,10 +198,34 @@ canvas{display:block}
 W A S D = Di chuyển &nbsp; | &nbsp; SPACE = Nhảy
 </div>
 
-<div id="win">
-    <h1>🏆 YOU WIN!</h1>
-    <button onclick="location.reload()">Chơi lại</button>
+
+<!-- MOBILE -->
+
+<div id="mobileControls">
+
+    <div id="joystick">
+        <div id="stick"></div>
+    </div>
+
+    <button id="jump">
+        JUMP
+    </button>
+
 </div>
+
+
+<!-- WIN -->
+
+<div id="win">
+
+    <h1>🏆 YOU WIN!</h1>
+
+    <button onclick="location.reload()">
+        Chơi lại
+    </button>
+
+</div>
+
 
 <script type="module">
 
@@ -90,11 +233,12 @@ import * as THREE from
 "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
 
-// ================================
+// =================================================
 // SCENE
-// ================================
+// =================================================
 
-const scene = new THREE.Scene();
+const scene =
+new THREE.Scene();
 
 scene.background =
 new THREE.Color(0x87ceeb);
@@ -107,22 +251,22 @@ new THREE.Fog(
 );
 
 
-// ================================
+// =================================================
 // CAMERA
-// ================================
+// =================================================
 
 const camera =
 new THREE.PerspectiveCamera(
     70,
     innerWidth / innerHeight,
-    0.1,
+    .1,
     500
 );
 
 
-// ================================
+// =================================================
 // RENDERER
-// ================================
+// =================================================
 
 const renderer =
 new THREE.WebGLRenderer({
@@ -138,16 +282,16 @@ renderer.setPixelRatio(
     Math.min(devicePixelRatio,2)
 );
 
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled=true;
 
 document.body.appendChild(
     renderer.domElement
 );
 
 
-// ================================
+// =================================================
 // LIGHT
-// ================================
+// =================================================
 
 const sun =
 new THREE.DirectionalLight(
@@ -156,25 +300,28 @@ new THREE.DirectionalLight(
 );
 
 sun.position.set(
-    30,50,20
+    30,
+    50,
+    20
 );
 
-sun.castShadow = true;
+sun.castShadow=true;
 
 scene.add(sun);
+
 
 scene.add(
     new THREE.HemisphereLight(
         0xffffff,
         0x557755,
-        1.4
+        1.5
     )
 );
 
 
-// ================================
-// MATERIAL
-// ================================
+// =================================================
+// MATERIALS
+// =================================================
 
 const stone =
 new THREE.MeshStandardMaterial({
@@ -184,7 +331,7 @@ new THREE.MeshStandardMaterial({
 
 const grass =
 new THREE.MeshStandardMaterial({
-    color:0x4d963f,
+    color:0x4f963f,
     roughness:1
 });
 
@@ -195,24 +342,31 @@ new THREE.MeshStandardMaterial({
 
 const shirt =
 new THREE.MeshStandardMaterial({
-    color:0x2979ff
+    color:0x2879ff
 });
 
 
-// ================================
-// PLATFORM
-// ================================
+// =================================================
+// PLATFORMS
+// =================================================
 
 const platforms=[];
 
-function platform(
-    x,y,z,w,d
+
+function makePlatform(
+    x,
+    y,
+    z,
+    width,
+    depth
 ){
 
     const rock =
     new THREE.Mesh(
         new THREE.BoxGeometry(
-            w,1,d
+            width,
+            1,
+            depth
         ),
         stone
     );
@@ -229,51 +383,97 @@ function platform(
     platforms.push(rock);
 
 
-    const grassTop =
+    const top =
     new THREE.Mesh(
         new THREE.BoxGeometry(
-            w+.1,
-            .2,
-            d+.1
+            width+.1,
+            .22,
+            depth+.1
         ),
         grass
     );
 
-    grassTop.position.set(
+    top.position.set(
         x,
-        y+.6,
+        y+.61,
         z
     );
 
-    grassTop.receiveShadow=true;
-
-    scene.add(grassTop);
+    scene.add(top);
 }
 
 
-// ================================
+// =================================================
 // MAP
-// ================================
+// =================================================
 
-platform(0,0,0,10,10);
+makePlatform(
+    0,0,0,
+    10,10
+);
 
-platform(0,1.5,-8,5,5);
-platform(4,3,-15,5,5);
-platform(-2,4.5,-22,5,5);
-platform(-7,6,-29,5,5);
-platform(0,7.5,-36,6,6);
-platform(7,9,-43,5,5);
-platform(3,10.5,-50,5,5);
-platform(-5,12,-57,6,6);
-platform(-10,13.5,-65,6,6);
-platform(-3,15,-73,7,7);
+makePlatform(
+    0,1.5,-8,
+    5,5
+);
 
-platform(5,16.5,-83,10,10);
+makePlatform(
+    4,3,-15,
+    5,5
+);
+
+makePlatform(
+    -2,4.5,-22,
+    5,5
+);
+
+makePlatform(
+    -7,6,-29,
+    5,5
+);
+
+makePlatform(
+    0,7.5,-36,
+    6,6
+);
+
+makePlatform(
+    7,9,-43,
+    5,5
+);
+
+makePlatform(
+    3,10.5,-50,
+    5,5
+);
+
+makePlatform(
+    -5,12,-57,
+    6,6
+);
+
+makePlatform(
+    -10,13.5,-65,
+    6,6
+);
+
+makePlatform(
+    -3,15,-73,
+    7,7
+);
 
 
-// ================================
 // FINISH
-// ================================
+
+makePlatform(
+    5,16.5,-83,
+    10,10
+);
+
+
+// =================================================
+// FINISH FLAG
+// =================================================
 
 const pole =
 new THREE.Mesh(
@@ -290,6 +490,7 @@ pole.position.set(
 );
 
 scene.add(pole);
+
 
 const flag =
 new THREE.Mesh(
@@ -308,9 +509,9 @@ flag.position.set(
 scene.add(flag);
 
 
-// ================================
+// =================================================
 // PLAYER
-// ================================
+// =================================================
 
 const player =
 new THREE.Group();
@@ -354,7 +555,7 @@ player.add(head);
 
 const spawn =
 new THREE.Vector3(
-    0,0.75,0
+    0,.75,0
 );
 
 player.position.copy(
@@ -364,22 +565,22 @@ player.position.copy(
 scene.add(player);
 
 
-// ================================
+// =================================================
 // PHYSICS
-// ================================
+// =================================================
 
 let velocityY=0;
 
-const gravity=-0.045;
+const gravity=-.045;
 
 const jumpPower=.9;
 
 let grounded=false;
 
 
-// ================================
-// INPUT
-// ================================
+// =================================================
+// KEYBOARD
+// =================================================
 
 const keys={
     w:false,
@@ -390,78 +591,223 @@ const keys={
 
 
 window.addEventListener(
-"keydown",
-e=>{
+    "keydown",
+    e=>{
 
-    const k=e.key.toLowerCase();
+        const k=
+        e.key.toLowerCase();
 
-    if(
-        k==="w" ||
-        k==="a" ||
-        k==="s" ||
-        k==="d"
-    ){
+        if(
+            k==="w" ||
+            k==="a" ||
+            k==="s" ||
+            k==="d"
+        ){
 
-        keys[k]=true;
+            keys[k]=true;
 
-        e.preventDefault();
-    }
+            e.preventDefault();
+        }
 
+        if(
+            e.code==="Space"
+        ){
 
-    if(e.code==="Space"){
+            e.preventDefault();
 
-        e.preventDefault();
-
-        if(grounded){
-
-            velocityY=
-            jumpPower;
-
-            grounded=false;
+            jump();
         }
     }
-});
+);
 
 
 window.addEventListener(
-"keyup",
-e=>{
+    "keyup",
+    e=>{
 
-    const k=
-    e.key.toLowerCase();
+        const k=
+        e.key.toLowerCase();
 
-    if(
-        k==="w" ||
-        k==="a" ||
-        k==="s" ||
-        k==="d"
-    ){
+        if(
+            k==="w" ||
+            k==="a" ||
+            k==="s" ||
+            k==="d"
+        ){
 
-        keys[k]=false;
+            keys[k]=false;
+        }
     }
-});
+);
 
 
-// QUAN TRỌNG:
-// Khi click ra ngoài game,
-// tất cả phím được thả.
+// =================================================
+// JUMP
+// =================================================
 
-window.addEventListener(
-"blur",
-()=>{
+function jump(){
 
-    keys.w=false;
-    keys.a=false;
-    keys.s=false;
-    keys.d=false;
-});
+    if(grounded){
+
+        velocityY=
+        jumpPower;
+
+        grounded=false;
+    }
+}
 
 
-// ================================
+// =================================================
+// MOBILE JOYSTICK
+// =================================================
+
+const joystick =
+document.getElementById(
+    "joystick"
+);
+
+const stick =
+document.getElementById(
+    "stick"
+);
+
+let joystickActive=false;
+
+let joystickX=0;
+
+let joystickY=0;
+
+
+function joystickMove(
+    clientX,
+    clientY
+){
+
+    const rect =
+    joystick.getBoundingClientRect();
+
+    const centerX =
+    rect.left +
+    rect.width/2;
+
+    const centerY =
+    rect.top +
+    rect.height/2;
+
+
+    let dx =
+    clientX-centerX;
+
+    let dy =
+    clientY-centerY;
+
+
+    const max=45;
+
+    const distance =
+    Math.sqrt(
+        dx*dx+dy*dy
+    );
+
+
+    if(distance>max){
+
+        dx=
+        dx/distance*max;
+
+        dy=
+        dy/distance*max;
+    }
+
+
+    joystickX =
+    dx/max;
+
+    joystickY =
+    dy/max;
+
+
+    stick.style.transform=
+    `translate(${dx}px,${dy}px)`;
+}
+
+
+joystick.addEventListener(
+    "touchstart",
+    e=>{
+
+        joystickActive=true;
+
+        joystickMove(
+            e.touches[0].clientX,
+            e.touches[0].clientY
+        );
+    },
+    {passive:false}
+);
+
+
+joystick.addEventListener(
+    "touchmove",
+    e=>{
+
+        if(!joystickActive)
+            return;
+
+        e.preventDefault();
+
+        joystickMove(
+            e.touches[0].clientX,
+            e.touches[0].clientY
+        );
+    },
+    {passive:false}
+);
+
+
+joystick.addEventListener(
+    "touchend",
+    ()=>{
+
+        joystickActive=false;
+
+        joystickX=0;
+        joystickY=0;
+
+        stick.style.transform=
+        "translate(0,0)";
+    }
+);
+
+
+// =================================================
+// MOBILE JUMP
+// =================================================
+
+const jumpButton =
+document.getElementById(
+    "jump"
+);
+
+
+jumpButton.addEventListener(
+    "touchstart",
+    e=>{
+
+        e.preventDefault();
+
+        jump();
+    },
+    {passive:false}
+);
+
+
+// =================================================
 // RESPAWN
-// ================================
+// =================================================
 
 let deaths=0;
+
 
 function respawn(){
 
@@ -469,23 +815,29 @@ function respawn(){
 
     document.getElementById(
         "deaths"
-    ).textContent=deaths;
+    ).textContent=
+    deaths;
+
 
     player.position.copy(
         spawn
     );
 
     velocityY=0;
+
+    joystickX=0;
+    joystickY=0;
 }
 
 
-// ================================
+// =================================================
 // COLLISION
-// ================================
+// =================================================
 
-function checkCollision(){
+function collision(){
 
     grounded=false;
+
 
     for(
         const p of platforms
@@ -495,30 +847,32 @@ function checkCollision(){
         new THREE.Box3()
         .setFromObject(p);
 
-        const x =
+
+        const x=
         player.position.x;
 
-        const z =
+        const z=
         player.position.z;
 
-        const y =
+        const y=
         player.position.y;
 
 
-        const insideX =
-        x > box.min.x-.55 &&
-        x < box.max.x+.55;
+        const insideX=
+        x>box.min.x-.6 &&
+        x<box.max.x+.6;
 
-        const insideZ =
-        z > box.min.z-.55 &&
-        z < box.max.z+.55;
+
+        const insideZ=
+        z>box.min.z-.6 &&
+        z<box.max.z+.6;
 
 
         if(
             insideX &&
             insideZ &&
-            y >= box.max.y-.4 &&
-            y <= box.max.y+.8 &&
+            y>=box.max.y-.4 &&
+            y<=box.max.y+.8 &&
             velocityY<=0
         ){
 
@@ -535,28 +889,56 @@ function checkCollision(){
 }
 
 
-// ================================
-// PLAYER MOVEMENT
-// ================================
+// =================================================
+// PLAYER UPDATE
+// =================================================
 
 function updatePlayer(){
 
     const speed=.18;
 
 
-    // Chỉ di chuyển khi đang bấm phím
+    // PC
 
-    if(keys.w)
-        player.position.z-=speed;
+    let moveX=0;
+    let moveZ=0;
 
-    if(keys.s)
-        player.position.z+=speed;
 
     if(keys.a)
-        player.position.x-=speed;
+        moveX-=1;
 
     if(keys.d)
-        player.position.x+=speed;
+        moveX+=1;
+
+    if(keys.w)
+        moveZ-=1;
+
+    if(keys.s)
+        moveZ+=1;
+
+
+    // MOBILE
+
+    if(
+        Math.abs(joystickX)>.05 ||
+        Math.abs(joystickY)>.05
+    ){
+
+        moveX=
+        joystickX;
+
+        moveZ=
+        joystickY;
+    }
+
+
+    // DI CHUYỂN
+
+    player.position.x +=
+    moveX*speed;
+
+    player.position.z +=
+    moveZ*speed;
 
 
     // GRAVITY
@@ -567,12 +949,10 @@ function updatePlayer(){
     velocityY;
 
 
-    // COLLISION
-
-    checkCollision();
+    collision();
 
 
-    // RƠI
+    // FALL
 
     if(
         player.position.y < -12
@@ -591,14 +971,15 @@ function updatePlayer(){
 
         document.getElementById(
             "win"
-        ).style.display="flex";
+        ).style.display=
+        "flex";
     }
 }
 
 
-// ================================
+// =================================================
 // CAMERA
-// ================================
+// =================================================
 
 function updateCamera(){
 
@@ -641,33 +1022,36 @@ function updateCamera(){
 }
 
 
-// ================================
+// =================================================
 // RESIZE
-// ================================
+// =================================================
 
 window.addEventListener(
-"resize",
-()=>{
+    "resize",
+    ()=>{
 
-    camera.aspect=
-    innerWidth/innerHeight;
+        camera.aspect=
+        innerWidth/
+        innerHeight;
 
-    camera.updateProjectionMatrix();
+        camera.updateProjectionMatrix();
 
-    renderer.setSize(
-        innerWidth,
-        innerHeight
-    );
-});
+        renderer.setSize(
+            innerWidth,
+            innerHeight
+        );
+    }
+);
 
 
-// ================================
+// =================================================
 // START
-// ================================
+// =================================================
 
 camera.position.set(
     0,6,11
 );
+
 
 function animate(){
 
@@ -684,6 +1068,7 @@ function animate(){
         camera
     );
 }
+
 
 animate();
 
