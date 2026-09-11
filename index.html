@@ -1,337 +1,483 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3D Stone Obby</title>
+
+<title>Stone Obby</title>
 
 <style>
-    * {
-        box-sizing: border-box;
-    }
+* {
+    box-sizing: border-box;
+}
 
-    body {
-        margin: 0;
-        overflow: hidden;
-        font-family: Arial, sans-serif;
-        background: #87ceeb;
-    }
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+    background: #87ceeb;
+}
 
-    #ui {
-        position: fixed;
-        top: 20px;
-        left: 20px;
-        z-index: 10;
-        color: white;
-        background: rgba(0,0,0,.55);
-        padding: 15px 20px;
-        border-radius: 12px;
-        font-size: 18px;
-    }
+canvas {
+    display: block;
+}
 
-    #finish {
-        display: none;
-        position: fixed;
-        inset: 0;
-        z-index: 20;
-        background: rgba(0,0,0,.65);
-        color: white;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        font-size: 40px;
-    }
+#ui {
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 10;
 
-    #finish button {
-        margin-top: 20px;
-        padding: 12px 25px;
-        font-size: 20px;
-        border: 0;
-        border-radius: 10px;
-        cursor: pointer;
-    }
+    padding: 14px 18px;
+
+    background: rgba(20, 30, 40, 0.8);
+    color: white;
+
+    border-radius: 12px;
+
+    font-size: 18px;
+    line-height: 1.5;
+
+    user-select: none;
+}
+
+#help {
+    position: fixed;
+    bottom: 15px;
+    left: 15px;
+
+    z-index: 10;
+
+    background: rgba(20,30,40,.75);
+    color: white;
+
+    padding: 10px 14px;
+    border-radius: 10px;
+
+    font-size: 14px;
+}
+
+#win {
+    display: none;
+
+    position: fixed;
+    inset: 0;
+
+    z-index: 20;
+
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+
+    background: rgba(0,0,0,.7);
+
+    color: white;
+}
+
+#win h1 {
+    font-size: 55px;
+    margin: 0 0 20px;
+}
+
+#win button {
+    border: none;
+    border-radius: 10px;
+
+    padding: 12px 25px;
+
+    font-size: 20px;
+
+    cursor: pointer;
+}
 </style>
 </head>
 
 <body>
 
 <div id="ui">
-    🪨 Stone Obby<br>
-    Deaths: <span id="deaths">0</span><br>
-    Stage: <span id="stage">1</span>
+    🪨 <b>STONE OBBY</b><br>
+    💀 Chết: <span id="deaths">0</span><br>
+    🚩 Stage: <span id="stage">1</span>
 </div>
 
-<div id="finish">
-    🏆 YOU WIN!
-    <button onclick="location.reload()">Play Again</button>
+<div id="help">
+    W A S D = Di chuyển &nbsp; | &nbsp; SPACE = Nhảy
 </div>
+
+<div id="win">
+    <h1>🏆 YOU WIN!</h1>
+    <button onclick="location.reload()">Chơi lại</button>
+</div>
+
 
 <script type="module">
 
 import * as THREE from
-'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-
-import { OrbitControls } from
-'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
 
-// ==========================
+// ==================================================
 // SCENE
-// ==========================
+// ==================================================
 
 const scene = new THREE.Scene();
 
-scene.background = new THREE.Color(0x87ceeb);
+scene.background =
+    new THREE.Color(0x87ceeb);
 
-scene.fog = new THREE.Fog(
-    0x87ceeb,
-    30,
-    150
-);
+scene.fog =
+    new THREE.Fog(
+        0x87ceeb,
+        40,
+        180
+    );
 
 
-// ==========================
+// ==================================================
 // CAMERA
-// ==========================
+// ==================================================
 
-const camera = new THREE.PerspectiveCamera(
-    70,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    500
+const camera =
+    new THREE.PerspectiveCamera(
+        70,
+        window.innerWidth /
+        window.innerHeight,
+        0.1,
+        500
+    );
+
+camera.position.set(
+    0,
+    7,
+    13
 );
 
-camera.position.set(0, 7, 10);
 
-
-// ==========================
+// ==================================================
 // RENDERER
-// ==========================
+// ==================================================
 
-const renderer = new THREE.WebGLRenderer({
-    antialias: true
-});
+const renderer =
+    new THREE.WebGLRenderer({
+        antialias: true
+    });
 
 renderer.setSize(
     window.innerWidth,
     window.innerHeight
 );
 
-renderer.shadowMap.enabled = true;
-
-document.body.appendChild(renderer.domElement);
-
-
-// ==========================
-// LIGHT
-// ==========================
-
-const sun = new THREE.DirectionalLight(
-    0xffffff,
-    2
+renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio, 2)
 );
 
-sun.position.set(
-    20,
-    40,
+renderer.shadowMap.enabled = true;
+
+renderer.shadowMap.type =
+    THREE.PCFSoftShadowMap;
+
+document.body.appendChild(
+    renderer.domElement
+);
+
+
+// ==================================================
+// LIGHT
+// ==================================================
+
+const sunlight =
+    new THREE.DirectionalLight(
+        0xffffff,
+        2
+    );
+
+sunlight.position.set(
+    30,
+    50,
     20
 );
 
-sun.castShadow = true;
+sunlight.castShadow = true;
 
-scene.add(sun);
+scene.add(sunlight);
 
 
-const ambient = new THREE.AmbientLight(
-    0xffffff,
-    0.6
-);
+const ambient =
+    new THREE.HemisphereLight(
+        0xffffff,
+        0x668866,
+        1.5
+    );
 
 scene.add(ambient);
 
 
-// ==========================
+// ==================================================
 // MATERIALS
-// ==========================
+// ==================================================
 
-const grassMaterial = new THREE.MeshStandardMaterial({
-    color: 0x4f8f3a
-});
+const grassMat =
+    new THREE.MeshStandardMaterial({
+        color: 0x4f9b45,
+        roughness: 1
+    });
 
-const stoneMaterial = new THREE.MeshStandardMaterial({
-    color: 0x777777,
-    roughness: 1
-});
+const stoneMat =
+    new THREE.MeshStandardMaterial({
+        color: 0x777777,
+        roughness: 1
+    });
 
-const dirtMaterial = new THREE.MeshStandardMaterial({
-    color: 0x70452b,
-    roughness: 1
-});
+const dirtMat =
+    new THREE.MeshStandardMaterial({
+        color: 0x70452b,
+        roughness: 1
+    });
 
-const playerMaterial = new THREE.MeshStandardMaterial({
-    color: 0x3366ff
-});
+const woodMat =
+    new THREE.MeshStandardMaterial({
+        color: 0x8b5a2b,
+        roughness: 1
+    });
 
 
-// ==========================
-// PLATFORM FUNCTION
-// ==========================
+// ==================================================
+// PLATFORMS
+// ==================================================
 
-function createPlatform(
+const platforms = [];
+
+function makePlatform(
     x,
     y,
     z,
-    width = 5,
-    height = 1,
-    depth = 5
+    width,
+    depth
 ) {
 
-    const geometry =
-        new THREE.BoxGeometry(
-            width,
-            height,
-            depth
-        );
+    // Đất
 
-    const platform =
+    const dirt =
         new THREE.Mesh(
-            geometry,
-            stoneMaterial
+            new THREE.BoxGeometry(
+                width,
+                1.2,
+                depth
+            ),
+            stoneMat
         );
 
-    platform.position.set(
+    dirt.position.set(
         x,
         y,
         z
     );
 
-    platform.castShadow = true;
-    platform.receiveShadow = true;
+    dirt.castShadow = true;
+    dirt.receiveShadow = true;
 
-    scene.add(platform);
+    scene.add(dirt);
 
-    platforms.push(platform);
+    platforms.push(dirt);
 
-    return platform;
+
+    // Cỏ trên mặt
+
+    const grass =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                width + 0.05,
+                0.25,
+                depth + 0.05
+            ),
+            grassMat
+        );
+
+    grass.position.set(
+        x,
+        y + 0.72,
+        z
+    );
+
+    grass.receiveShadow = true;
+
+    scene.add(grass);
+
+
+    return dirt;
 }
 
 
-// ==========================
-// PLATFORMS
-// ==========================
+// ==================================================
+// MAP
+// ==================================================
 
-const platforms = [];
+// Spawn
 
-
-// SPAWN PLATFORM
-createPlatform(
+makePlatform(
     0,
     0,
     0,
     10,
-    1,
     10
 );
 
 
-// BƯỚC ĐÁ
-createPlatform(0, 1, -8, 5, 1, 5);
+// Các bậc đá
 
-createPlatform(4, 2, -15, 5, 1, 5);
+makePlatform(
+    0,
+    1.5,
+    -8,
+    5,
+    5
+);
 
-createPlatform(-2, 3, -22, 5, 1, 5);
+makePlatform(
+    4,
+    3,
+    -15,
+    5,
+    5
+);
 
-createPlatform(-7, 4, -29, 5, 1, 5);
+makePlatform(
+    -2,
+    4.5,
+    -22,
+    5,
+    5
+);
 
-createPlatform(0, 5, -36, 6, 1, 6);
+makePlatform(
+    -7,
+    6,
+    -29,
+    5,
+    5
+);
 
-createPlatform(7, 6, -43, 5, 1, 5);
+makePlatform(
+    0,
+    7.5,
+    -36,
+    6,
+    6
+);
 
-createPlatform(3, 7, -50, 5, 1, 5);
+makePlatform(
+    7,
+    9,
+    -43,
+    5,
+    5
+);
 
-createPlatform(-5, 8, -57, 6, 1, 6);
+makePlatform(
+    3,
+    10.5,
+    -50,
+    5,
+    5
+);
 
-createPlatform(-10, 9, -65, 6, 1, 6);
+makePlatform(
+    -5,
+    12,
+    -57,
+    6,
+    6
+);
 
-createPlatform(-3, 10, -73, 7, 1, 7);
+makePlatform(
+    -10,
+    13.5,
+    -65,
+    6,
+    6
+);
+
+makePlatform(
+    -3,
+    15,
+    -73,
+    7,
+    7
+);
 
 
-// ==========================
-// FINISH PLATFORM
-// ==========================
+// ==================================================
+// FINISH
+// ==================================================
 
-const finishPlatform =
-    createPlatform(
-        5,
-        11,
-        -82,
-        10,
-        1,
-        10
-    );
+makePlatform(
+    5,
+    16.5,
+    -83,
+    10,
+    10
+);
 
 
-// ==========================
+// ==================================================
 // FINISH FLAG
-// ==========================
-
-const poleGeometry =
-    new THREE.CylinderGeometry(
-        0.15,
-        0.15,
-        5
-    );
+// ==================================================
 
 const pole =
     new THREE.Mesh(
-        poleGeometry,
-        dirtMaterial
+        new THREE.CylinderGeometry(
+            0.15,
+            0.15,
+            6
+        ),
+        woodMat
     );
 
 pole.position.set(
     5,
-    13.5,
-    -82
+    20,
+    -83
 );
+
+pole.castShadow = true;
 
 scene.add(pole);
 
 
-const flagGeometry =
-    new THREE.BoxGeometry(
-        3,
-        1.5,
-        0.1
-    );
-
-const flagMaterial =
-    new THREE.MeshStandardMaterial({
-        color: 0xff3333
-    });
-
 const flag =
     new THREE.Mesh(
-        flagGeometry,
-        flagMaterial
+        new THREE.BoxGeometry(
+            3,
+            1.6,
+            0.1
+        ),
+        new THREE.MeshStandardMaterial({
+            color: 0xff3333
+        })
     );
 
 flag.position.set(
     6.4,
-    15,
-    -82
+    21.5,
+    -83
 );
 
 scene.add(flag);
 
 
-// ==========================
+// ==================================================
 // PLAYER
-// ==========================
+// ==================================================
 
-const player = new THREE.Group();
+const player =
+    new THREE.Group();
 
 
-// BODY
+// Body
+
 const body =
     new THREE.Mesh(
         new THREE.BoxGeometry(
@@ -339,7 +485,9 @@ const body =
             1.8,
             0.7
         ),
-        playerMaterial
+        new THREE.MeshStandardMaterial({
+            color: 0x3366ff
+        })
     );
 
 body.position.y = 1;
@@ -349,7 +497,8 @@ body.castShadow = true;
 player.add(body);
 
 
-// HEAD
+// Head
+
 const head =
     new THREE.Mesh(
         new THREE.BoxGeometry(
@@ -358,7 +507,7 @@ const head =
             1
         ),
         new THREE.MeshStandardMaterial({
-            color: 0xffcc99
+            color: 0xffc28b
         })
     );
 
@@ -369,66 +518,109 @@ head.castShadow = true;
 player.add(head);
 
 
-// SPAWN POSITION
-const spawnPosition =
+// Mắt
+
+const eyeMat =
+    new THREE.MeshBasicMaterial({
+        color: 0x111111
+    });
+
+const eye1 =
+    new THREE.Mesh(
+        new THREE.BoxGeometry(
+            0.12,
+            0.12,
+            0.05
+        ),
+        eyeMat
+    );
+
+eye1.position.set(
+    -0.2,
+    2.5,
+    -0.48
+);
+
+player.add(eye1);
+
+
+const eye2 =
+    eye1.clone();
+
+eye2.position.x = 0.2;
+
+player.add(eye2);
+
+
+// Spawn
+
+const spawn =
     new THREE.Vector3(
         0,
-        1,
+        0.75,
         0
     );
 
 player.position.copy(
-    spawnPosition
+    spawn
 );
 
 scene.add(player);
 
 
-// ==========================
+// ==================================================
 // PHYSICS
-// ==========================
+// ==================================================
 
 let velocityY = 0;
 
-let gravity = -0.035;
+const gravity = -0.045;
 
-let jumpPower = 0.75;
+const jumpPower = 0.9;
 
-let onGround = false;
+let grounded = false;
 
 
-// ==========================
+// ==================================================
 // CONTROLS
-// ==========================
+// ==================================================
 
 const keys = {};
 
 window.addEventListener(
     "keydown",
-    e => {
-        keys[e.key.toLowerCase()] = true;
+    function(e) {
+
+        keys[e.key.toLowerCase()] =
+            true;
 
         if (
             e.code === "Space" &&
-            onGround
+            grounded
         ) {
-            velocityY = jumpPower;
-            onGround = false;
+
+            velocityY =
+                jumpPower;
+
+            grounded = false;
         }
     }
 );
 
+
 window.addEventListener(
     "keyup",
-    e => {
-        keys[e.key.toLowerCase()] = false;
+    function(e) {
+
+        keys[e.key.toLowerCase()] =
+            false;
     }
 );
 
 
-// ==========================
-// DEATH SYSTEM
-// ==========================
+// ==================================================
+// DEATH
+// ==================================================
 
 let deaths = 0;
 
@@ -441,23 +633,30 @@ function respawn() {
     ).textContent = deaths;
 
     player.position.copy(
-        spawnPosition
+        spawn
     );
 
     velocityY = 0;
 }
 
 
-// ==========================
+// ==================================================
 // COLLISION
-// ==========================
+// ==================================================
 
-function checkPlatformCollision() {
+function collision() {
 
-    onGround = false;
+    grounded = false;
 
-    const playerBottom =
+    const playerX =
+        player.position.x;
+
+    const playerZ =
+        player.position.z;
+
+    const playerY =
         player.position.y;
+
 
     for (
         const platform of platforms
@@ -465,71 +664,60 @@ function checkPlatformCollision() {
 
         const box =
             new THREE.Box3()
-                .setFromObject(platform);
+                .setFromObject(
+                    platform
+                );
+
 
         const insideX =
-            player.position.x >
-                box.min.x - 0.5 &&
-            player.position.x <
-                box.max.x + 0.5;
+            playerX >
+                box.min.x - 0.6 &&
+            playerX <
+                box.max.x + 0.6;
+
 
         const insideZ =
-            player.position.z >
-                box.min.z - 0.5 &&
-            player.position.z <
-                box.max.z + 0.5;
+            playerZ >
+                box.min.z - 0.6 &&
+            playerZ <
+                box.max.z + 0.6;
 
-        const touchingTop =
-            playerBottom >=
-                box.max.y - 0.15 &&
-            playerBottom <=
-                box.max.y + 0.5;
+
+        const platformTop =
+            box.max.y;
+
 
         if (
             insideX &&
             insideZ &&
-            touchingTop &&
+            playerY >=
+                platformTop - 0.4 &&
+            playerY <=
+                platformTop + 0.7 &&
             velocityY <= 0
         ) {
 
             player.position.y =
-                box.max.y;
+                platformTop;
 
             velocityY = 0;
 
-            onGround = true;
+            grounded = true;
+
+            break;
         }
     }
 }
 
 
-// ==========================
-// FINISH CHECK
-// ==========================
-
-function checkFinish() {
-
-    if (
-        player.position.z <
-        -78 &&
-        player.position.y >
-        10
-    ) {
-
-        document.getElementById(
-            "finish"
-        ).style.display = "flex";
-    }
-}
-
-
-// ==========================
-// UPDATE PLAYER
-// ==========================
+// ==================================================
+// PLAYER UPDATE
+// ==================================================
 
 function updatePlayer() {
 
-    const speed = 0.16;
+    const speed = 0.18;
+
 
     if (keys["w"]) {
         player.position.z -= speed;
@@ -548,65 +736,87 @@ function updatePlayer() {
     }
 
 
-    // gravity
+    // Gravity
 
     velocityY += gravity;
 
-    player.position.y += velocityY;
+    player.position.y +=
+        velocityY;
 
 
-    // collision
+    // Collision
 
-    checkPlatformCollision();
+    collision();
 
 
-    // fell off map
+    // Rơi khỏi map
 
     if (
-        player.position.y < -15
+        player.position.y < -12
     ) {
 
         respawn();
     }
 
 
-    checkFinish();
+    // Finish
+
+    if (
+        player.position.z < -78 &&
+        player.position.y > 15
+    ) {
+
+        document.getElementById(
+            "win"
+        ).style.display = "flex";
+    }
 }
 
 
-// ==========================
-// CAMERA FOLLOW
-// ==========================
+// ==================================================
+// CAMERA
+// ==================================================
 
 function updateCamera() {
 
-    const target =
-        new THREE.Vector3(
-            player.position.x,
-            player.position.y + 3,
-            player.position.z + 7
-        );
+    const targetX =
+        player.position.x;
 
-    camera.position.lerp(
-        target,
-        0.08
-    );
+    const targetY =
+        player.position.y + 6;
+
+    const targetZ =
+        player.position.z + 11;
+
+
+    camera.position.x +=
+        (targetX -
+        camera.position.x) * 0.08;
+
+    camera.position.y +=
+        (targetY -
+        camera.position.y) * 0.08;
+
+    camera.position.z +=
+        (targetZ -
+        camera.position.z) * 0.08;
+
 
     camera.lookAt(
         player.position.x,
         player.position.y + 1,
-        player.position.z - 3
+        player.position.z - 4
     );
 }
 
 
-// ==========================
+// ==================================================
 // RESIZE
-// ==========================
+// ==================================================
 
 window.addEventListener(
     "resize",
-    () => {
+    function() {
 
         camera.aspect =
             window.innerWidth /
@@ -622,14 +832,14 @@ window.addEventListener(
 );
 
 
-// ==========================
+// ==================================================
 // GAME LOOP
-// ==========================
+// ==================================================
 
-function animate() {
+function gameLoop() {
 
     requestAnimationFrame(
-        animate
+        gameLoop
     );
 
     updatePlayer();
@@ -642,7 +852,7 @@ function animate() {
     );
 }
 
-animate();
+gameLoop();
 
 </script>
 
