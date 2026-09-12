@@ -108,15 +108,37 @@ const loader=new GLTFLoader();
 loader.load("./scene.gltf?v=roblox-bacon-5",(gltf)=>{
   bacon=gltf.scene;
 
+  // Force the embedded Bacon texture onto the meshes.
+  // The original asset uses KHR_materials_pbrSpecularGlossiness;
+  // applying the diffuse image explicitly keeps the skin colors visible.
+  let baconTexture = null;
+  const embeddedImage = gltf.parser && gltf.parser.json &&
+                        gltf.parser.json.images &&
+                        gltf.parser.json.images[0] &&
+                        gltf.parser.json.images[0].uri;
+
+  if (embeddedImage && embeddedImage.startsWith("data:image/")) {
+    baconTexture = new THREE.TextureLoader().load(embeddedImage);
+    baconTexture.colorSpace = THREE.SRGBColorSpace;
+    baconTexture.flipY = false;
+  }
+
   bacon.traverse(o=>{
     if(o.isMesh){
       o.visible=true;
       o.castShadow=true;
       o.receiveShadow=true;
-      if(o.material){
+
+      if (baconTexture) {
+        o.material = new THREE.MeshStandardMaterial({
+          map: baconTexture,
+          roughness: 0.85,
+          metalness: 0
+        });
+      } else if(o.material){
         o.material.transparent=false;
         o.material.opacity=1;
-        o.depthWrite=true;
+        o.material.depthWrite=true;
       }
     }
   });
@@ -126,7 +148,7 @@ loader.load("./scene.gltf?v=roblox-bacon-5",(gltf)=>{
     This specific Bacon file is ~0.05566 units tall in its source data.
     0.0.36x -> ~2.00 units tall, which is the intended Roblox-like size.
   */
-  bacon.scale.setScalar(0.36);
+  bacon.scale.setScalar(36);
   bacon.updateMatrixWorld(true);
 
   // Center X/Z only. Do NOT recenter Y with a second scale operation.
@@ -141,13 +163,31 @@ loader.load("./scene.gltf?v=roblox-bacon-5",(gltf)=>{
 
   if(gltf.animations && gltf.animations.length){
     mixer=new THREE.AnimationMixer(bacon);
-    runAction=mixer.clipAction(gltf.animations[0]);
-    runAction.setLoop(THREE.LoopRepeat,Infinity);
-    runAction.clampWhenFinished=false;
-    // IMPORTANT: start paused. It will only play while moving.
+    const sourceClip = gltf.animations[0];
+
+    // Remove hips translation tracks so the animation cannot move Bacon
+    // away from the player when WASD is pressed (root-motion fix).
+    const noRootMotionTracks = sourceClip.tracks.filter(track => {
+      const name = track.name.toLowerCase();
+      return !(name.includes("mixamorig:hips") && name.endsWith(".position"));
+    });
+
+    const stableClip = new THREE.AnimationClip(
+      sourceClip.name,
+      sourceClip.duration,
+      noRootMotionTracks
+    );
+
+    mixer = new THREE.AnimationMixer(bacon);
+    runAction = mixer.clipAction(stableClip);
+    runAction.setLoop(THREE.LoopRepeat, Infinity);
+    runAction.clampWhenFinished = false;
+
+    // Standing still = paused. Moving = play.
     runAction.play();
-    runAction.paused=true;
-    console.log("🥓 BACON READY:",gltf.animations[0].name);
+    runAction.paused = true;
+
+    console.log("🥓 BACON READY:", sourceClip.name, "root motion removed");
   }
 },undefined,(err)=>{
   console.error("❌ Bacon could not load:",err);
