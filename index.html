@@ -134,7 +134,7 @@ for(const x of [-.08,.08]) box(visual,x,1.75,-.275,.025,.22,.025,mat.white);
 /* subtle backpack */
 box(visual,0,1.45,.32,.68,.78,.16,mat.dark);
 
-const spawn=new THREE.Vector3(0,0.12,3);
+const spawn=new THREE.Vector3(0,0,3);
 player.position.copy(spawn);
 const R=.30,H=2.55,SPEED=7,GRAVITY=20,JUMP=7.6;
 let vy=0,grounded=true,finished=false,moving=false;
@@ -197,7 +197,7 @@ function moveY(dt){
         const inZ=player.position.z>=p.z-p.d/2+.05 && player.position.z<=p.z+p.d/2-.05;
         if(!inX||!inZ) continue;
 
-        const top=p.y+p.h/2+.12;
+        const top=p.y+p.h/2;
 
         // Normal swept landing.
         if(oldY>=top-.02 && nextY<=top){
