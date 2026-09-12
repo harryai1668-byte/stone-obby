@@ -56,23 +56,134 @@ function platform(x,y,z,w,h,d){
   const grass=new THREE.MeshStandardMaterial({color:0x63ad48,roughness:1});
   const t=new THREE.Mesh(new THREE.BoxGeometry(w-.08,.12,d-.08),grass);
   t.position.set(x,y+h/2+.06,z);t.receiveShadow=true;scene.add(t);
-  platforms.push({x,y,z,w,h,d});
+  const p={x,y,z,w,h,d,b,t};
+  platforms.push(p);
+  return p;
 }
+
+/* ===== OBBY MAP: closer steps + mixed challenges ===== */
+// The original step gaps are shortened by about 1 mm per gap.
 platform(0,-1,0,14,2,14);
-platform(0,0,-10,9,1.5,7);
-platform(5,1,-20,7,1.5,7);
-platform(-2,2,-30,7,1.5,7);
-platform(6,3,-40,7,1.5,7);
-platform(0,4,-50,8,1.5,7);
-platform(-7,5,-60,7,1.5,7);
-platform(0,6,-70,9,1.5,8);
-platform(7,7,-81,7,1.5,7);
-platform(0,8,-92,12,1.5,10);
+platform(0,0,-9.999,9,1.5,7);
+platform(5,1,-19.998,7,1.5,7);
+platform(-2,2,-29.997,7,1.5,7);
+
+// Checkpoint 1 area
+platform(6,3,-39.996,7,1.5,7);
+
+// Narrow zig-zag balance section: less jumping, more precision.
+platform(2,3.7,-48.995,2.2,1.1,7);
+platform(-3,4.4,-56.994,2.2,1.1,6);
+platform(2,5.1,-63.993,2.2,1.1,6);
+
+// Moving platform section.
+const movingP=platform(0,5.8,-70.992,3.2,1.1,4);
+
+// Wider recovery platform / checkpoint 2.
+platform(0,6.8,-78.991,8,1.5,7);
+
+// Side-to-side precision platforms.
+platform(-5,7.8,-87.990,3,1.2,4);
+platform(4,8.7,-94.989,3,1.2,4);
+platform(0,9.6,-101.988,5,1.5,6);
+
+// Final balance platform.
+platform(0,10.6,-110.987,2.5,1.1,8);
+
+// Finish platform.
+platform(0,11.8,-120.986,10,1.5,10);
+
+const checkpoints=[
+  {x:6,z:-39.996,y:3.75,active:false},
+  {x:0,z:-78.991,y:7.55,active:false},
+  {x:0,z:-110.987,y:11.15,active:false}
+];
+
+function makeCheckpoint(cp){
+  const base=new THREE.Mesh(
+    new THREE.CylinderGeometry(.65,.65,.10,24),
+    new THREE.MeshStandardMaterial({color:0x22aaff,emissive:0x073b66,emissiveIntensity:.8})
+  );
+  base.position.set(cp.x,cp.y+.05,cp.z);scene.add(base);
+  const ring=new THREE.Mesh(
+    new THREE.TorusGeometry(.72,.07,10,32),
+    new THREE.MeshStandardMaterial({color:0x55ddff,emissive:0x116688,emissiveIntensity:1})
+  );
+  ring.rotation.x=Math.PI/2; ring.position.set(cp.x,cp.y+.12,cp.z);scene.add(ring);
+  cp.mesh=base;cp.ring=ring;
+}
+checkpoints.forEach(makeCheckpoint);
+
+let respawnPoint=new THREE.Vector3(0,0,3);
+let checkpointIndex=-1;
+
+function checkCheckpoints(){
+  for(let i=0;i<checkpoints.length;i++){
+    const c=checkpoints[i];
+    if(Math.hypot(player.position.x-c.x,player.position.z-c.z)<1.35 && player.position.y>c.y-.8){
+      if(i>checkpointIndex){
+        checkpointIndex=i;
+        respawnPoint.set(c.x,c.y+.08,c.z);
+        c.active=true;
+        c.mesh.material.color.setHex(0x55ff88);
+        c.mesh.material.emissive.setHex(0x145522);
+        c.ring.material.color.setHex(0x99ffbb);
+      }
+    }
+  }
+}
+
+function respawn(){
+  player.position.set(respawnPoint.x,respawnPoint.y,respawnPoint.z);
+  vy=0;
+  grounded=true;
+  moveX=0;
+  moveZ=0;
+  moving=false;
+}
+
+/* ===== Moving platform ===== */
+let movingTime=0;
+function updateChallenges(dt){
+  movingTime+=dt;
+  const offset=Math.sin(movingTime*1.15)*3.1;
+  movingP.x=offset;
+  movingP.b.position.x=offset;
+  movingP.t.position.x=offset;
+
+  // Rotating hazard bars: touching one resets to the latest checkpoint.
+  for(const h of hazards){
+    h.angle+=h.speed*dt;
+    h.group.rotation.y=h.angle;
+    const dx=player.position.x-h.x, dz=player.position.z-h.z;
+    const c=Math.cos(h.angle), si=Math.sin(h.angle);
+    const localX=dx*c-dz*si, localZ=dx*si+dz*c;
+    if(Math.abs(localX)<h.length/2+.35 && Math.abs(localZ)<.22+.25 &&
+       player.position.y>h.y-.9 && player.position.y<h.y+1.6){
+      respawn();
+      break;
+    }
+  }
+}
+
+const hazards=[];
+function rotatingHazard(x,y,z,length=5,speed=2.2){
+  const group=new THREE.Group();
+  group.position.set(x,y,z);
+  const bar=new THREE.Mesh(
+    new THREE.BoxGeometry(length,.25,.42),
+    new THREE.MeshStandardMaterial({color:0xff4b4b,roughness:.6,emissive:0x330000})
+  );
+  bar.castShadow=true;group.add(bar);scene.add(group);
+  hazards.push({group,x,y,z,length,speed,angle:0});
+}
+rotatingHazard(0,8.05,-80.9,5.5,2.4);
+rotatingHazard(0,11.55,-113.2,4.0,-2.8);
 
 const pole=new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,4,12),new THREE.MeshStandardMaterial({color:0xffffff}));
-pole.position.set(0,10.75,-92);scene.add(pole);
+pole.position.set(0,13.75,-120.986);scene.add(pole);
 const flag=new THREE.Mesh(new THREE.PlaneGeometry(2.2,1.2),new THREE.MeshStandardMaterial({color:0xff4040,side:THREE.DoubleSide}));
-flag.position.set(1.05,11.7,-92);scene.add(flag);
+flag.position.set(1.05,14.7,-120.986);scene.add(flag);
 
 /* ===== NEW PLAYER: stylized hoodie character ===== */
 const player=new THREE.Group(); scene.add(player);
@@ -136,13 +247,51 @@ box(visual,0,1.45,.32,.68,.78,.16,mat.dark);
 
 const spawn=new THREE.Vector3(0,0,3);
 player.position.copy(spawn);
-const R=.30,H=2.55,SPEED=7,GRAVITY=20,JUMP=7.6;
+const R=.30,H=2.55,SPEED=8.2,GRAVITY=18,JUMP=10.5;
 let vy=0,grounded=true,finished=false,moving=false;
 const keys={};
 
 addEventListener("keydown",e=>{keys[e.code]=true;if(e.code==="Space")e.preventDefault()});
 addEventListener("keyup",e=>keys[e.code]=false);
-addEventListener("blur",()=>{for(const k in keys)delete keys[k];joyX=joyY=0;knob.style.transform="translate(0,0)"});
+addEventListener("blur",()=>{for(const k in keys)delete keys[k];joyX=joyY=0;knob.style.transform="translate(0,0)";orbiting=false;document.body.style.cursor="default"});
+
+/* Roblox-style 3D camera: RIGHT MOUSE + DRAG, works while WASD is held. */
+let camYaw=0,camPitch=0,orbiting=false,lastMX=0,lastMY=0;
+const CAM_DIST=8.5,CAM_SENS=.008;
+
+document.addEventListener("contextmenu",e=>e.preventDefault());
+
+document.addEventListener("mousedown",e=>{
+  if(e.button!==2) return;
+  orbiting=true;
+  lastMX=e.clientX;
+  lastMY=e.clientY;
+  document.body.style.cursor="grabbing";
+  e.preventDefault();
+});
+
+document.addEventListener("mousemove",e=>{
+  if(!orbiting) return;
+  const dx=e.clientX-lastMX;
+  const dy=e.clientY-lastMY;
+  lastMX=e.clientX;
+  lastMY=e.clientY;
+  camYaw-=dx*CAM_SENS;
+  camPitch+=dy*CAM_SENS;
+  camPitch=Math.max(-0.55,Math.min(0.75,camPitch));
+  e.preventDefault();
+});
+
+function stopOrbit(){
+  orbiting=false;
+  document.body.style.cursor="default";
+}
+document.addEventListener("mouseup",e=>{
+  if(e.button===2) stopOrbit();
+});
+document.addEventListener("mouseleave",()=>{ if(orbiting) stopOrbit(); });
+window.addEventListener("blur",stopOrbit);
+
 
 let joyX=0,joyY=0,joyOn=false;
 const joy=document.getElementById("joy"),knob=document.getElementById("knob");
@@ -169,13 +318,67 @@ function overlapY(p){
 }
 /* Solid horizontal collision, sub-stepped to stop tunneling. */
 function moveXZ(dx,dz){
-  // Smooth horizontal movement: never snap/push the player away from edges.
-  const maxStep=.045;
+  const maxStep=.012;
   const n=Math.max(1,Math.ceil(Math.hypot(dx,dz)/maxStep));
+  const sx=dx/n, sz=dz/n;
+
   for(let i=0;i<n;i++){
-    player.position.x+=dx/n;
-    player.position.z+=dz/n;
+    // Swept X collision: only stop when we actually CROSS a wall.
+    const oldX=player.position.x;
+    const newX=oldX+sx;
+    player.position.x=newX;
+
+    for(const p of platforms){
+      if(!bodyOverlapsZ(p)) continue;
+      const left=p.x-p.w/2-R;
+      const right=p.x+p.w/2+R;
+
+      if(oldX<=left && newX>left){
+        player.position.x=left-.001;
+      }else if(oldX>=right && newX<right){
+        player.position.x=right+.001;
+      }
+    }
+
+    // Swept Z collision: same rule, so no snapping/teleporting.
+    const oldZ=player.position.z;
+    const newZ=oldZ+sz;
+    player.position.z=newZ;
+
+    for(const p of platforms){
+      if(!bodyOverlapsX(p)) continue;
+      const front=p.z-p.d/2-R;
+      const back=p.z+p.d/2+R;
+
+      if(oldZ<=front && newZ>front){
+        player.position.z=front-.001;
+      }else if(oldZ>=back && newZ<back){
+        player.position.z=back+.001;
+      }
+    }
   }
+}
+
+function bodyVerticalOverlaps(p){
+  const feet=player.position.y;
+  const head=feet+H;
+  const top=p.y+p.h/2;
+  const bottom=p.y-p.h/2;
+  return head>bottom+.02 && feet<top-.02;
+}
+
+function bodyOverlapsZ(p){
+  if(!grounded) return false;
+  if(!bodyVerticalOverlaps(p)) return false;
+  return player.position.z>p.z-p.d/2-R &&
+         player.position.z<p.z+p.d/2+R;
+}
+
+function bodyOverlapsX(p){
+  if(!grounded) return false;
+  if(!bodyVerticalOverlaps(p)) return false;
+  return player.position.x>p.x-p.w/2-R &&
+         player.position.x<p.x+p.w/2+R;
 }
 function moveY(dt){
   const maxStep=.008;
@@ -266,20 +469,34 @@ function update(dt){
  if(keys.KeyA)x-=1;if(keys.KeyD)x+=1;if(keys.KeyW)z-=1;if(keys.KeyS)z+=1;
  if(joyOn){x=joyX;z=joyY}
  if(Math.hypot(x,z)>1){const l=Math.hypot(x,z);x/=l;z/=l}
- moveX=x;moveZ=z;moving=Math.hypot(x,z)>.08;
- moveXZ(x*SPEED*dt,z*SPEED*dt);
+
+ // Camera-relative movement: W always moves where the camera is facing.
+ const rightX=Math.cos(camYaw), rightZ=-Math.sin(camYaw);
+ const forwardX=-Math.sin(camYaw), forwardZ=-Math.cos(camYaw);
+ const worldX=rightX*x - forwardX*z;
+ const worldZ=rightZ*x - forwardZ*z;
+
+ moveX=worldX;moveZ=worldZ;moving=Math.hypot(worldX,worldZ)>.08;
+ moveXZ(worldX*SPEED*dt,worldZ*SPEED*dt);
+ checkCheckpoints();
+ updateChallenges(dt);
  if((keys.Space||jumpTap)&&grounded){keys.Space=false;jumpTap=false;vy=JUMP;grounded=false}
  else {keys.Space=false;jumpTap=false}
  moveY(dt);
  animateCharacter(dt);
- if(player.position.y<-15){player.position.copy(spawn);vy=0;grounded=true}
- if(player.position.z<-88&&player.position.y>7){finished=true;document.getElementById("win").style.display="flex"}
+ if(player.position.y<-15){respawn()}
+ if(player.position.z<-117&&player.position.y>10){finished=true;document.getElementById("win").style.display="flex"}
 }
 const desired=new THREE.Vector3();
 function cam(dt){
- desired.set(player.position.x,player.position.y+3.2,player.position.z+8.5);
+ const horizontal=CAM_DIST*Math.cos(camPitch);
+ desired.set(
+   player.position.x+Math.sin(camYaw)*horizontal,
+   player.position.y+3.2+Math.sin(camPitch)*CAM_DIST,
+   player.position.z+Math.cos(camYaw)*horizontal
+ );
  camera.position.lerp(desired,1-Math.pow(.0008,dt));
- camera.lookAt(player.position.x,player.position.y+1.15,player.position.z-3.5);
+ camera.lookAt(player.position.x,player.position.y+1.15,player.position.z);
 }
 const clock=new THREE.Clock();
 function loop(){requestAnimationFrame(loop);const dt=Math.min(clock.getDelta(),.033);update(dt);cam(dt);renderer.render(scene,camera)}
