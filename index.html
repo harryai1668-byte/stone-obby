@@ -35,13 +35,14 @@ canvas{display:block}
 }
 </script>
 
+
 <script type="module">
-import * as THREE from "three";
-import {GLTFLoader} from "three/addons/loaders/GLTFLoader.js";
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import {GLTFLoader} from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
 
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x87ceeb);
-scene.fog=new THREE.Fog(0x87ceeb,35,180);
+scene.fog=new THREE.Fog(0x87ceeb,45,220);
 
 const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,500);
 const renderer=new THREE.WebGLRenderer({antialias:true});
@@ -53,149 +54,166 @@ document.body.appendChild(renderer.domElement);
 
 scene.add(new THREE.HemisphereLight(0xffffff,0x668866,2));
 const sun=new THREE.DirectionalLight(0xffffff,2.5);
-sun.position.set(20,35,20);
+sun.position.set(25,40,25);
 sun.castShadow=true;
 scene.add(sun);
 
 const platforms=[];
-function platform(x,y,z,w,h,d){
-  const m=new THREE.Mesh(
+function addPlatform(x,y,z,w,h,d){
+  const body=new THREE.Mesh(
     new THREE.BoxGeometry(w,h,d),
     new THREE.MeshStandardMaterial({color:0x777777,roughness:.9})
   );
-  m.position.set(x,y,z);
-  m.castShadow=true;m.receiveShadow=true;
-  scene.add(m);
-  platforms.push({m,w,h,d});
+  body.position.set(x,y,z);
+  body.castShadow=true;
+  body.receiveShadow=true;
+  scene.add(body);
+
   const grass=new THREE.Mesh(
-    new THREE.BoxGeometry(w-.12,.12,d-.12),
+    new THREE.BoxGeometry(Math.max(.1,w-.12),.12,Math.max(.1,d-.12)),
     new THREE.MeshStandardMaterial({color:0x5f9e45,roughness:1})
   );
   grass.position.set(x,y+h/2+.06,z);
   grass.receiveShadow=true;
   scene.add(grass);
+
+  platforms.push({x,y,z,w,h,d,mesh:body});
 }
 
-platform(0,-1,0,14,2,14);
-platform(0,0,-10,9,1.5,7);
-platform(5,1,-20,7,1.5,7);
-platform(-2,2,-30,7,1.5,7);
-platform(6,3,-40,7,1.5,7);
-platform(0,4,-50,8,1.5,7);
-platform(-7,5,-60,7,1.5,7);
-platform(0,6,-70,9,1.5,8);
-platform(7,7,-81,7,1.5,7);
-platform(0,8,-92,12,1.5,10);
+addPlatform(0,-1,0,14,2,14);
+addPlatform(0,0,-10,9,1.5,7);
+addPlatform(5,1,-20,7,1.5,7);
+addPlatform(-2,2,-30,7,1.5,7);
+addPlatform(6,3,-40,7,1.5,7);
+addPlatform(0,4,-50,8,1.5,7);
+addPlatform(-7,5,-60,7,1.5,7);
+addPlatform(0,6,-70,9,1.5,8);
+addPlatform(7,7,-81,7,1.5,7);
+addPlatform(0,8,-92,12,1.5,10);
 
 const pole=new THREE.Mesh(
   new THREE.CylinderGeometry(.08,.08,4,12),
   new THREE.MeshStandardMaterial({color:0xffffff})
 );
-pole.position.set(0,10,-92);scene.add(pole);
+pole.position.set(0,10,-92);
+scene.add(pole);
+
 const flag=new THREE.Mesh(
   new THREE.PlaneGeometry(2.2,1.2),
   new THREE.MeshStandardMaterial({color:0xff3333,side:THREE.DoubleSide})
 );
-flag.position.set(1.05,11,-92);scene.add(flag);
+flag.position.set(1.05,11,-92);
+scene.add(flag);
 
 const player=new THREE.Group();
 scene.add(player);
 
-let mixer=null,runAction=null,bacon=null,modelReady=false,visual=null;
-let moving=false;
-
-const loader=new GLTFLoader();
-
-loader.load("./scene.gltf?v=bacon-final-color-2",async(gltf)=>{
-  const model=gltf.scene;
-  bacon=model;
-
-  // This exported Bacon file has a 0.01 root scale.
-  // 36x gives approximately normal Roblox character size.
-  model.scale.setScalar(36);
-
-  // Reuse the texture already decoded by GLTFLoader.
-  let texture=null;
-  try{
-    texture=await gltf.parser.getDependency("texture",0);
-    if(texture){
-      texture.colorSpace=THREE.SRGBColorSpace;
-      texture.flipY=false;
-      texture.needsUpdate=true;
-    }
-  }catch(e){
-    console.warn("Embedded Bacon texture unavailable:",e);
-  }
-
-  model.traverse(o=>{
-    if(!o.isMesh)return;
-
-    o.visible=true;
-    o.castShadow=true;
-    o.receiveShadow=true;
-
-    if(texture){
-      o.material=new THREE.MeshBasicMaterial({
-        map:texture,
-        side:THREE.DoubleSide
-      });
-    }else if(o.material){
-      o.material.transparent=false;
-      o.material.opacity=1;
-      o.material.depthWrite=true;
-    }
-  });
-
-  // Stable placement: the original mesh is offset inside the glTF.
-  // Put that offset back on the player origin after scaling.
-  model.position.set(0,0.05,0);
-  const baconBasePosition=model.position.clone();
-  const baconBaseRotation=model.rotation.clone();
-  model.rotation.y=Math.PI;
-
-  player.add(model);
-  visual=model;
-  modelReady=true;
-
-  if(gltf.animations&&gltf.animations.length){
-    const sourceClip=gltf.animations[0];
-
-    // Remove hips position/root-motion so WASD controls the player location.
-    const stableTracks=sourceClip.tracks.filter(track=>{
-      const n=track.name.toLowerCase();
-      const isPosition=n.endsWith(".position");
-      const isRoot =
-        n.includes("hips") ||
-        n.includes("pelvis") ||
-        n.includes("root") ||
-        n.includes("mixamorig:hips");
-      return !(isPosition && isRoot);
-    });
-
-    const stableClip=new THREE.AnimationClip(
-      sourceClip.name,
-      sourceClip.duration,
-      stableTracks
-    );
-
-    mixer=new THREE.AnimationMixer(model);
-    runAction=mixer.clipAction(stableClip);
-    runAction.setLoop(THREE.LoopRepeat,Infinity);
-    runAction.play();
-    runAction.paused=true;
-    runAction.setEffectiveTimeScale(1);
-
-    console.log("🥓 BACON READY — texture + fixed position + root motion removed");
-  }else{
-    console.log("🥓 BACON READY — no animation");
-  }
-},undefined,error=>{
-  console.error("❌ BACON LOAD ERROR:",error);
-});
 const spawn=new THREE.Vector3(0,0,3);
 player.position.copy(spawn);
 
-const keys={};
+// Character collider: deliberately close to a normal Roblox avatar footprint.
+const R=.42;
+const H=2.05;
+const SPEED=7.0;
+const GRAVITY=20;
+const JUMP=7.6;
+
+let vy=0;
+let grounded=true;
+let moving=false;
+let finished=false;
+
+let bacon=null;
+let mixer=null;
+let runAction=null;
+let baconBasePos=new THREE.Vector3();
+let baconBaseRot=new THREE.Euler(0,0,0);
+
+function putBaconOnFeet(model){
+  // Center model on player root first.
+  model.position.set(0,0,0);
+  model.rotation.set(0,0,0);
+  model.updateMatrixWorld(true);
+
+  // Use the actual rendered bounds after scale so the feet touch the
+  // player's foot plane, regardless of the glTF's internal origin.
+  const box=new THREE.Box3().setFromObject(model);
+  const lift=-box.min.y+0.025;
+  model.position.y=lift;
+  model.updateMatrixWorld(true);
+
+  baconBasePos.set(0,lift,0);
+  baconBaseRot.set(0,0,0);
+  model.position.copy(baconBasePos);
+  model.rotation.set(0,0,0);
+}
+
+const loader=new GLTFLoader();
+loader.load("./scene.gltf?v=complete-final-1",gltf=>{
+  const model=gltf.scene;
+  bacon=model;
+
+  // The supplied glTF has a very small native scale; this gives a
+  // normal Roblox-like avatar height without the giant model problem.
+  model.scale.setScalar(36);
+
+  let texture=null;
+  try{
+    texture=gltf.parser.getDependency("texture",0);
+    if(texture && texture.then){
+      texture.then(t=>{
+        if(!t)return;
+        t.colorSpace=THREE.SRGBColorSpace;
+        t.flipY=false;
+        t.needsUpdate=true;
+        model.traverse(o=>{
+          if(!o.isMesh)return;
+          o.material=new THREE.MeshStandardMaterial({
+            map:t,
+            roughness:.85,
+            metalness:0
+          });
+        });
+      });
+    }
+  }catch(e){}
+
+  model.traverse(o=>{
+    if(!o.isMesh)return;
+    o.visible=true;
+    o.castShadow=true;
+    o.receiveShadow=true;
+  });
+
+  putBaconOnFeet(model);
+  player.add(model);
+
+  if(gltf.animations && gltf.animations.length){
+    const clip=gltf.animations[0];
+
+    // Remove only root/hips POSITION tracks. This stops Mixamo root-motion
+    // from physically moving the avatar away from the player collider.
+    const tracks=clip.tracks.filter(t=>{
+      const n=t.name.toLowerCase();
+      return !(n.endsWith(".position") &&
+        (n.includes("hips")||n.includes("pelvis")||n.includes("root")));
+    });
+
+    const stable=new THREE.AnimationClip(clip.name,clip.duration,tracks);
+    mixer=new THREE.AnimationMixer(model);
+    runAction=mixer.clipAction(stable);
+    runAction.setLoop(THREE.LoopRepeat,Infinity);
+    runAction.play();
+    runAction.paused=true;
+  }
+
+  console.log("🥓 Bacon loaded — centered, feet aligned, root motion removed");
+},undefined,e=>{
+  console.error("Bacon load failed:",e);
+});
+
+// ---------- INPUT ----------
+const keys=Object.create(null);
 addEventListener("keydown",e=>{
   keys[e.code]=true;
   if(e.code==="Space")e.preventDefault();
@@ -204,32 +222,161 @@ addEventListener("keyup",e=>keys[e.code]=false);
 addEventListener("blur",()=>Object.keys(keys).forEach(k=>keys[k]=false));
 
 let joyX=0,joyY=0,joyOn=false;
-const joy=document.getElementById("joy"),knob=document.getElementById("knob");
+const joy=document.getElementById("joy");
+const knob=document.getElementById("knob");
+
 function joyMove(e){
-  const r=joy.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
-  let x=e.clientX-cx,y=e.clientY-cy;
-  const max=48,len=Math.hypot(x,y);
+  const r=joy.getBoundingClientRect();
+  const cx=r.left+r.width/2, cy=r.top+r.height/2;
+  let x=e.clientX-cx, y=e.clientY-cy;
+  const max=48, len=Math.hypot(x,y);
   if(len>max){x=x/len*max;y=y/len*max}
-  joyX=x/max;joyY=y/max;
+  joyX=x/max;
+  joyY=y/max;
   knob.style.transform=`translate(${x}px,${y}px)`;
 }
-joy.addEventListener("pointerdown",e=>{joyOn=true;joy.setPointerCapture(e.pointerId);joyMove(e)});
+joy.addEventListener("pointerdown",e=>{
+  e.preventDefault();
+  joyOn=true;
+  joy.setPointerCapture(e.pointerId);
+  joyMove(e);
+});
 joy.addEventListener("pointermove",e=>{if(joyOn)joyMove(e)});
-function joyReset(){joyOn=false;joyX=0;joyY=0;knob.style.transform="translate(0,0)"}
-joy.addEventListener("pointerup",joyReset);
-joy.addEventListener("pointercancel",joyReset);
+function resetJoy(){
+  joyOn=false;
+  joyX=0;joyY=0;
+  knob.style.transform="translate(0,0)";
+}
+joy.addEventListener("pointerup",resetJoy);
+joy.addEventListener("pointercancel",resetJoy);
 
 let jumpPressed=false;
 document.getElementById("jump").addEventListener("pointerdown",e=>{
-  e.preventDefault();jumpPressed=true;
+  e.preventDefault();
+  jumpPressed=true;
 });
 
-let vy=0,grounded=true,finished=false;
-function jump(){
-  if(grounded){vy=7.5;grounded=false}
+// ---------- COLLISION ----------
+function insideXZ(p,x,z,margin=0){
+  return x>=p.x-p.w/2+margin &&
+         x<=p.x+p.w/2-margin &&
+         z>=p.z-p.d/2+margin &&
+         z<=p.z+p.d/2-margin;
 }
 
-const clock=new THREE.Clock();
+function getStandingPlatform(){
+  let best=null;
+  for(const p of platforms){
+    const top=p.y+p.h/2;
+    if(insideXZ(p,player.position.x,player.position.z,R*.85) &&
+       Math.abs(player.position.y-top)<.06){
+      if(!best || top>best.y+best.h/2)best=p;
+    }
+  }
+  return best;
+}
+
+function moveHorizontal(dx,dz){
+  // X sweep against platform side walls.
+  if(dx!==0){
+    let target=player.position.x+dx;
+    for(const p of platforms){
+      const top=p.y+p.h/2, bottom=p.y-p.h/2;
+      const feet=player.position.y, head=feet+H;
+
+      if(head<=bottom || feet>=top)continue;
+      if(Math.abs(player.position.z-p.z)>p.d/2+R)continue;
+
+      const left=p.x-p.w/2-R;
+      const right=p.x+p.w/2+R;
+
+      if(target>left && target<right){
+        target=dx>0?left:right;
+      }
+    }
+    player.position.x=target;
+  }
+
+  // Z sweep against platform side walls.
+  if(dz!==0){
+    let target=player.position.z+dz;
+    for(const p of platforms){
+      const top=p.y+p.h/2, bottom=p.y-p.h/2;
+      const feet=player.position.y, head=feet+H;
+
+      if(head<=bottom || feet>=top)continue;
+      if(Math.abs(player.position.x-p.x)>p.w/2+R)continue;
+
+      const front=p.z-p.d/2-R;
+      const back=p.z+p.d/2+R;
+
+      if(target>front && target<back){
+        target=dz>0?front:back;
+      }
+    }
+    player.position.z=target;
+  }
+}
+
+function verticalMove(dt){
+  const oldY=player.position.y;
+  const oldVy=vy;
+
+  vy-=GRAVITY*dt;
+  let newY=oldY+vy*dt;
+  grounded=false;
+
+  // Falling: detect every platform whose top is crossed this frame.
+  if(oldVy<=0){
+    let landing=null;
+
+    for(const p of platforms){
+      if(!insideXZ(p,player.position.x,player.position.z,R*.85))continue;
+
+      const top=p.y+p.h/2;
+      if(oldY>=top && newY<=top){
+        if(!landing || top>landing.y+landing.h/2)landing=p;
+      }
+    }
+
+    if(landing){
+      newY=landing.y+landing.h/2;
+      vy=0;
+      grounded=true;
+    }
+  }
+
+  // Rising: stop the head at the underside of a platform.
+  if(oldVy>0){
+    const oldHead=oldY+H;
+    const newHead=newY+H;
+    let ceiling=null;
+
+    for(const p of platforms){
+      if(!insideXZ(p,player.position.x,player.position.z,R*.85))continue;
+
+      const bottom=p.y-p.h/2;
+      if(oldHead<=bottom && newHead>=bottom){
+        if(!ceiling || bottom<ceiling.y-ceiling.h/2)ceiling=p;
+      }
+    }
+
+    if(ceiling){
+      newY=ceiling.y-ceiling.h/2-H;
+      vy=0;
+    }
+  }
+
+  player.position.y=newY;
+
+  const standing=getStandingPlatform();
+  if(standing && vy<=0){
+    player.position.y=standing.y+standing.h/2;
+    vy=0;
+    grounded=true;
+  }
+}
+
 function update(dt){
   if(finished)return;
 
@@ -240,124 +387,41 @@ function update(dt){
   if(keys.KeyS)z+=1;
   if(joyOn){x=joyX;z=joyY}
 
-  const len=Math.hypot(x,z);
-  if(len>1){x/=len;z/=len}
+  const l=Math.hypot(x,z);
+  if(l>1){x/=l;z/=l}
   moving=Math.hypot(x,z)>.08;
 
-  // Character collider dimensions (feet are at player.position.y).
-  const R=.42;
-  const H=2.05;
+  moveHorizontal(x*SPEED*dt,z*SPEED*dt);
 
-  // Horizontal movement. We deliberately don't use platform side collision:
-  // this is an obby, so the important solid collision is the platform top.
-  player.position.x += x*7*dt;
-  player.position.z += z*7*dt;
-
-  // Face the direction of travel.
-  if(moving && bacon){
-    bacon.rotation.y=Math.atan2(x,z);
-  }
-
-  if(keys.Space || jumpPressed){
+  if((keys.Space||jumpPressed) && grounded){
     keys.Space=false;
     jumpPressed=false;
-    if(grounded) vy=7.6;
+    vy=JUMP;
+    grounded=false;
+  }else{
+    keys.Space=false;
+    jumpPressed=false;
   }
 
-  const oldY=player.position.y;
-  const oldVy=vy;
+  verticalMove(dt);
 
-  vy-=20*dt;
-  let newY=oldY+vy*dt;
-  grounded=false;
-
-  // Find the highest platform top crossed by the player's feet while falling.
-  if(oldVy<=0){
-    let landingTop=null;
-    for(const p of platforms){
-      const top=p.m.position.y+p.h/2;
-
-      const inX =
-        player.position.x >= p.m.position.x-p.w/2+R &&
-        player.position.x <= p.m.position.x+p.w/2-R;
-
-      const inZ =
-        player.position.z >= p.m.position.z-p.d/2+R &&
-        player.position.z <= p.m.position.z+p.d/2-R;
-
-      if(!inX || !inZ) continue;
-
-      if(oldY>=top && newY<=top){
-        if(landingTop===null || top>landingTop) landingTop=top;
-      }
-    }
-
-    if(landingTop!==null){
-      newY=landingTop;
-      vy=0;
-      grounded=true;
-    }
-  }
-
-  // Ceiling collision: while rising, stop if the character's head crosses
-  // the underside of a platform.
-  if(oldVy>0){
-    let ceiling=null;
-    const oldHead=oldY+H;
-    const newHead=newY+H;
-
-    for(const p of platforms){
-      const bottom=p.m.position.y-p.h/2;
-
-      const inX =
-        player.position.x >= p.m.position.x-p.w/2+R &&
-        player.position.x <= p.m.position.x+p.w/2-R;
-
-      const inZ =
-        player.position.z >= p.m.position.z-p.d/2+R &&
-        player.position.z <= p.m.position.z+p.d/2-R;
-
-      if(inX && inZ && oldHead<=bottom && newHead>=bottom){
-        if(ceiling===null || bottom<ceiling) ceiling=bottom;
-      }
-    }
-
-    if(ceiling!==null){
-      newY=ceiling-H;
-      vy=0;
-    }
-  }
-
-  player.position.y=newY;
-
-  // If we are already standing on a platform, keep the feet locked to it.
-  if(!grounded && vy<=0){
-    for(const p of platforms){
-      const top=p.m.position.y+p.h/2;
-      const inX=Math.abs(player.position.x-p.m.position.x)<=p.w/2-R;
-      const inZ=Math.abs(player.position.z-p.m.position.z)<=p.d/2-R;
-
-      if(inX && inZ && Math.abs(player.position.y-top)<.045){
-        player.position.y=top;
-        vy=0;
-        grounded=true;
-        break;
-      }
-    }
-  }
-
+  // Animation never controls the player position.
   if(runAction)runAction.paused=!moving;
   if(mixer)mixer.update(dt);
 
-  // Animation must never move the visible Bacon away from the player root.
+  // Re-apply exact visual offset after animation.
   if(bacon){
-    bacon.position.set(0,0.05,0);
+    bacon.position.copy(baconBasePos);
     bacon.rotation.x=0;
     bacon.rotation.z=0;
-    if(!moving) bacon.rotation.y=0;
+
+    // The supplied Bacon rig faces -Z at rotation 0.
+    // W is -Z, so this is also the Roblox-style forward direction.
+    if(moving)bacon.rotation.y=Math.atan2(x,z);
+    else bacon.rotation.y=0;
   }
 
-  if(player.position.y < -15){
+  if(player.position.y<-15){
     player.position.copy(spawn);
     vy=0;
     grounded=true;
@@ -369,21 +433,30 @@ function update(dt){
     document.getElementById("win").style.display="flex";
   }
 }
-function cameraUpdate(dt){
-  const target=new THREE.Vector3(
+
+// ---------- CAMERA ----------
+const camPos=new THREE.Vector3();
+function updateCamera(dt){
+  camPos.set(
     player.position.x,
-    player.position.y+3.1,
-    player.position.z+7.2
+    player.position.y+3.2,
+    player.position.z+8.5
   );
-  camera.position.lerp(target,1-Math.pow(.001,dt));
-  camera.lookAt(player.position.x,player.position.y+1,player.position.z-2);
+
+  camera.position.lerp(camPos,1-Math.pow(.001,dt));
+  camera.lookAt(
+    player.position.x,
+    player.position.y+1.0,
+    player.position.z-3.0
+  );
 }
 
+const clock=new THREE.Clock();
 function loop(){
   requestAnimationFrame(loop);
   const dt=Math.min(clock.getDelta(),.033);
   update(dt);
-  cameraUpdate(dt);
+  updateCamera(dt);
   renderer.render(scene,camera);
 }
 loop();
