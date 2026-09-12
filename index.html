@@ -124,9 +124,9 @@ loader.load("./scene.gltf?v=roblox-bacon-5",(gltf)=>{
   /*
     IMPORTANT:
     This specific Bacon file is ~0.05566 units tall in its source data.
-    36x -> ~2.00 units tall, which is the intended Roblox-like size.
+    0.0.36x -> ~2.00 units tall, which is the intended Roblox-like size.
   */
-  bacon.scale.setScalar(36);
+  bacon.scale.setScalar(0.36);
   bacon.updateMatrixWorld(true);
 
   // Center X/Z only. Do NOT recenter Y with a second scale operation.
