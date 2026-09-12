@@ -134,7 +134,7 @@ for(const x of [-.08,.08]) box(visual,x,1.75,-.275,.025,.22,.025,mat.white);
 /* subtle backpack */
 box(visual,0,1.45,.32,.68,.78,.16,mat.dark);
 
-const spawn=new THREE.Vector3(0,0,3);
+const spawn=new THREE.Vector3(0,0.12,3);
 player.position.copy(spawn);
 const R=.30,H=2.55,SPEED=7,GRAVITY=20,JUMP=7.6;
 let vy=0,grounded=true,finished=false,moving=false;
@@ -178,7 +178,7 @@ function moveXZ(dx,dz){
   }
 }
 function moveY(dt){
-  const maxStep=.006;
+  const maxStep=.008;
   const n=Math.max(1,Math.ceil(dt/maxStep));
   const step=dt/n;
 
@@ -187,46 +187,63 @@ function moveY(dt){
     const oldV=vy;
     vy-=GRAVITY*step;
     const nextY=oldY+vy*step;
-    let landingTop=null;
 
-    if(oldV<=0){
-      for(const p of platforms){
-        const inX=player.position.x>=p.x-p.w/2+.12 && player.position.x<=p.x+p.w/2-.12;
-        const inZ=player.position.z>=p.z-p.d/2+.12 && player.position.z<=p.z+p.d/2-.12;
-        if(!inX||!inZ) continue;
-        const top=p.y+p.h/2;
-        if(oldY>=top && nextY<=top && (landingTop===null||top>landingTop)) landingTop=top;
-      }
-    }
+    let landed=null;
 
-    if(landingTop!==null){
-      player.position.y=landingTop; vy=0; grounded=true; continue;
-    }
-
-    if(oldV>0){
-      let ceiling=null;
-      for(const p of platforms){
-        const inX=player.position.x>=p.x-p.w/2+.12 && player.position.x<=p.x+p.w/2-.12;
-        const inZ=player.position.z>=p.z-p.d/2+.12 && player.position.z<=p.z+p.d/2-.12;
-        if(!inX||!inZ) continue;
-        const bottom=p.y-p.h/2;
-        if(oldY+H<=bottom && nextY+H>=bottom && (ceiling===null||bottom<ceiling)) ceiling=bottom;
-      }
-      if(ceiling!==null){player.position.y=ceiling-H-.001;vy=0;}
-      else player.position.y=nextY;
-    }else player.position.y=nextY;
-
-    grounded=false;
+    // Landing / standing: the collision surface is the TOP of the green cap.
     if(vy<=0){
       for(const p of platforms){
-        const top=p.y+p.h/2;
-        const inX=player.position.x>=p.x-p.w/2+.12 && player.position.x<=p.x+p.w/2-.12;
-        const inZ=player.position.z>=p.z-p.d/2+.12 && player.position.z<=p.z+p.d/2-.12;
-        if(inX&&inZ&&Math.abs(player.position.y-top)<.025){
-          player.position.y=top;vy=0;grounded=true;break;
+        const inX=player.position.x>=p.x-p.w/2+.05 && player.position.x<=p.x+p.w/2-.05;
+        const inZ=player.position.z>=p.z-p.d/2+.05 && player.position.z<=p.z+p.d/2-.05;
+        if(!inX||!inZ) continue;
+
+        const top=p.y+p.h/2+.12;
+
+        // Normal swept landing.
+        if(oldY>=top-.02 && nextY<=top){
+          if(landed===null || top>landed) landed=top;
+        }
+
+        // If already slightly inside the platform while falling/standing,
+        // push the feet back onto the top instead of letting the player sink through.
+        if(oldY<top && oldY>top-.20 && nextY<top){
+          if(landed===null || top>landed) landed=top;
         }
       }
     }
+
+    if(landed!==null){
+      player.position.y=landed;
+      vy=0;
+      grounded=true;
+      continue;
+    }
+
+    // Ceiling collision while jumping upward.
+    if(oldV>0){
+      let ceiling=null;
+      for(const p of platforms){
+        const inX=player.position.x>=p.x-p.w/2+.05 && player.position.x<=p.x+p.w/2-.05;
+        const inZ=player.position.z>=p.z-p.d/2+.05 && player.position.z<=p.z+p.d/2-.05;
+        if(!inX||!inZ) continue;
+
+        const bottom=p.y-p.h/2;
+        if(oldY+H<=bottom && nextY+H>=bottom){
+          if(ceiling===null || bottom<ceiling) ceiling=bottom;
+        }
+      }
+
+      if(ceiling!==null){
+        player.position.y=ceiling-H-.001;
+        vy=0;
+      }else{
+        player.position.y=nextY;
+      }
+    }else{
+      player.position.y=nextY;
+    }
+
+    grounded=false;
   }
 }
 function animateCharacter(dt){
