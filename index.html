@@ -148,6 +148,7 @@ loader.load("./scene.gltf?v=bacon-final-color-2",async(gltf)=>{
   // Stable placement: the original mesh is offset inside the glTF.
   // Put that offset back on the player origin after scaling.
   model.position.set(0.54,0.12,-2.70);
+  model.rotation.y=Math.PI;
 
   player.add(model);
   visual=model;
@@ -241,7 +242,7 @@ function update(dt){
   player.position.x+=x*7*dt;
   player.position.z+=z*7*dt;
 
-  if(moving && bacon) bacon.rotation.y=Math.atan2(x,z)+Math.PI;
+  if(moving && bacon) bacon.rotation.y=Math.atan2(x,z);
 
   if(keys.Space||jumpPressed){
     keys.Space=false;jumpPressed=false;jump();
