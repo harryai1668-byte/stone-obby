@@ -101,7 +101,7 @@ flag.position.set(1.05,11,-92);scene.add(flag);
 const player=new THREE.Group();
 scene.add(player);
 
-let mixer=null,runAction=null,bacon=null,modelReady=false;
+let mixer=null,runAction=null,bacon=null,modelReady=false,visual=null;
 let moving=false;
 
 const loader=new GLTFLoader();
@@ -164,7 +164,7 @@ loader.load("./scene.gltf?v=bacon-final-color-2",async(gltf)=>{
         n.includes("hips") ||
         n.includes("pelvis") ||
         n.includes("root") ||
-        n.includes("mixamorig");
+        n.includes("mixamorig:hips");
       return !(isPosition && isRoot);
     });
 
@@ -241,7 +241,7 @@ function update(dt){
   player.position.x+=x*7*dt;
   player.position.z+=z*7*dt;
 
-  if(moving && bacon) player.rotation.y=Math.atan2(x,z);
+  if(moving && bacon) bacon.rotation.y=Math.atan2(x,z)+Math.PI;
 
   if(keys.Space||jumpPressed){
     keys.Space=false;jumpPressed=false;jump();
