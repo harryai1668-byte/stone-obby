@@ -105,94 +105,82 @@ let mixer=null,runAction=null,bacon=null,modelReady=false;
 let moving=false;
 
 const loader=new GLTFLoader();
-loader.load("./scene.gltf?v=roblox-bacon-5",(gltf)=>{
-  bacon=gltf.scene;
 
-  // Force the embedded Bacon texture onto the meshes.
-  // The original asset uses KHR_materials_pbrSpecularGlossiness;
-  // applying the diffuse image explicitly keeps the skin colors visible.
-  let baconTexture = null;
-  const embeddedImage = gltf.parser && gltf.parser.json &&
-                        gltf.parser.json.images &&
-                        gltf.parser.json.images[0] &&
-                        gltf.parser.json.images[0].uri;
+loader.load("./scene.gltf?v=bacon-final-color-2",async(gltf)=>{
+  const model=gltf.scene;
 
-  if (embeddedImage && embeddedImage.startsWith("data:image/")) {
-    baconTexture = new THREE.TextureLoader().load(embeddedImage);
-    baconTexture.colorSpace = THREE.SRGBColorSpace;
-    baconTexture.flipY = false;
+  // This exported Bacon file has a 0.01 root scale.
+  // 36x gives approximately normal Roblox character size.
+  model.scale.setScalar(36);
+
+  // Reuse the texture already decoded by GLTFLoader.
+  let texture=null;
+  try{
+    texture=await gltf.parser.getDependency("texture",0);
+    if(texture){
+      texture.colorSpace=THREE.SRGBColorSpace;
+      texture.flipY=false;
+      texture.needsUpdate=true;
+    }
+  }catch(e){
+    console.warn("Embedded Bacon texture unavailable:",e);
   }
 
-  bacon.traverse(o=>{
-    if(o.isMesh){
-      o.visible=true;
-      o.castShadow=true;
-      o.receiveShadow=true;
+  model.traverse(o=>{
+    if(!o.isMesh)return;
 
-      if (baconTexture) {
-        o.material = new THREE.MeshStandardMaterial({
-          map: baconTexture,
-          roughness: 0.85,
-          metalness: 0
-        });
-      } else if(o.material){
-        o.material.transparent=false;
-        o.material.opacity=1;
-        o.material.depthWrite=true;
-      }
+    o.visible=true;
+    o.castShadow=true;
+    o.receiveShadow=true;
+
+    if(texture){
+      o.material=new THREE.MeshBasicMaterial({
+        map:texture,
+        side:THREE.DoubleSide
+      });
+    }else if(o.material){
+      o.material.transparent=false;
+      o.material.opacity=1;
+      o.material.depthWrite=true;
     }
   });
 
-  /*
-    IMPORTANT:
-    This specific Bacon file is ~0.05566 units tall in its source data.
-    0.0.36x -> ~2.00 units tall, which is the intended Roblox-like size.
-  */
-  bacon.scale.setScalar(36);
-  bacon.updateMatrixWorld(true);
+  // Stable placement: the original mesh is offset inside the glTF.
+  // Put that offset back on the player origin after scaling.
+  model.position.set(0.54,0,-2.70);
 
-  // Center X/Z only. Do NOT recenter Y with a second scale operation.
-  const b=new THREE.Box3().setFromObject(bacon);
-  const c=b.getCenter(new THREE.Vector3());
-  bacon.position.x-=c.x;
-  bacon.position.z-=c.z;
-  bacon.position.y-=b.min.y;
-
-  player.add(bacon);
+  player.add(model);
+  visual=model;
   modelReady=true;
 
-  if(gltf.animations && gltf.animations.length){
-    mixer=new THREE.AnimationMixer(bacon);
-    const sourceClip = gltf.animations[0];
+  if(gltf.animations&&gltf.animations.length){
+    const sourceClip=gltf.animations[0];
 
-    // Remove hips translation tracks so the animation cannot move Bacon
-    // away from the player when WASD is pressed (root-motion fix).
-    const noRootMotionTracks = sourceClip.tracks.filter(track => {
-      const name = track.name.toLowerCase();
-      return !(name.includes("mixamorig:hips") && name.endsWith(".position"));
+    // Remove hips position/root-motion so WASD controls the player location.
+    const stableTracks=sourceClip.tracks.filter(track=>{
+      const n=track.name.toLowerCase();
+      return !(n.includes("mixamorig:hips")&&n.endsWith(".position"));
     });
 
-    const stableClip = new THREE.AnimationClip(
+    const stableClip=new THREE.AnimationClip(
       sourceClip.name,
       sourceClip.duration,
-      noRootMotionTracks
+      stableTracks
     );
 
-    mixer = new THREE.AnimationMixer(bacon);
-    runAction = mixer.clipAction(stableClip);
-    runAction.setLoop(THREE.LoopRepeat, Infinity);
-    runAction.clampWhenFinished = false;
-
-    // Standing still = paused. Moving = play.
+    mixer=new THREE.AnimationMixer(model);
+    runAction=mixer.clipAction(stableClip);
+    runAction.setLoop(THREE.LoopRepeat,Infinity);
     runAction.play();
-    runAction.paused = true;
+    runAction.paused=true;
 
-    console.log("🥓 BACON READY:", sourceClip.name, "root motion removed");
+    console.log("🥓 BACON READY — texture + fixed position + root motion removed");
+  }else{
+    console.log("🥓 BACON READY — no animation");
   }
-},undefined,(err)=>{
-  console.error("❌ Bacon could not load:",err);
+},undefined,error=>{
+  console.error("❌ BACON LOAD ERROR:",error);
 });
-
 const spawn=new THREE.Vector3(0,1.2,3);
 player.position.copy(spawn);
 
