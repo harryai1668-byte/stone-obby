@@ -148,6 +148,8 @@ loader.load("./scene.gltf?v=bacon-final-color-2",async(gltf)=>{
   // Stable placement: the original mesh is offset inside the glTF.
   // Put that offset back on the player origin after scaling.
   model.position.set(0.54,0.12,-2.70);
+  const baconBasePosition=model.position.clone();
+  const baconBaseRotation=model.rotation.clone();
   model.rotation.y=Math.PI;
 
   player.add(model);
@@ -241,11 +243,55 @@ function update(dt){
   if(len>1){x/=len;z/=len}
   moving=Math.hypot(x,z)>.08;
 
-  // Horizontal movement belongs ONLY to the player root.
-  player.position.x += x*7*dt;
-  player.position.z += z*7*dt;
+  // PLAYER COLLIDER: radius 0.45, height 2.0.
+  const radius=.45;
+  const height=2.0;
 
-  // Bacon visual faces the direction it travels.
+  // Move X first and block against platform side faces.
+  let nextX=player.position.x+x*7*dt;
+  for(const p of platforms){
+    const top=p.m.position.y+p.h/2;
+    const bottom=p.m.position.y-p.h/2;
+    const feet=player.position.y;
+    const head=feet+height;
+
+    const verticalOverlap=head>bottom && feet<top;
+    if(!verticalOverlap)continue;
+
+    const minX=p.m.position.x-p.w/2-radius;
+    const maxX=p.m.position.x+p.w/2+radius;
+    const zInside=Math.abs(player.position.z-p.m.position.z)<=p.d/2+radius;
+
+    if(zInside && nextX>minX && nextX<maxX){
+      if(x>0) nextX=p.m.position.x-p.w/2-radius;
+      else if(x<0) nextX=p.m.position.x+p.w/2+radius;
+    }
+  }
+  player.position.x=nextX;
+
+  // Move Z and block against platform side faces.
+  let nextZ=player.position.z+z*7*dt;
+  for(const p of platforms){
+    const top=p.m.position.y+p.h/2;
+    const bottom=p.m.position.y-p.h/2;
+    const feet=player.position.y;
+    const head=feet+height;
+
+    const verticalOverlap=head>bottom && feet<top;
+    if(!verticalOverlap)continue;
+
+    const minZ=p.m.position.z-p.d/2-radius;
+    const maxZ=p.m.position.z+p.d/2+radius;
+    const xInside=Math.abs(player.position.x-p.m.position.x)<=p.w/2+radius;
+
+    if(xInside && nextZ>minZ && nextZ<maxZ){
+      if(z>0) nextZ=p.m.position.z-p.d/2-radius;
+      else if(z<0) nextZ=p.m.position.z+p.d/2+radius;
+    }
+  }
+  player.position.z=nextZ;
+
+  // Face the direction of movement.
   if(moving && bacon){
     bacon.rotation.y=Math.atan2(x,z);
   }
@@ -256,34 +302,26 @@ function update(dt){
     jump();
   }
 
-  // Save the previous feet height for swept vertical collision.
   const previousY=player.position.y;
-
   vy-=20*dt;
   const nextY=previousY+vy*dt;
   player.position.y=nextY;
   grounded=false;
 
-  /*
-    Player Y = feet position.
-    A platform can only be landed on while descending and while the feet
-    cross the platform top from above. This prevents jumping THROUGH steps
-    and avoids the old "top+1.25" collision window.
-  */
+  // Solid top-surface collision: land only when crossing the top while falling.
   if(vy<=0){
     for(const p of platforms){
       const top=p.m.position.y+p.h/2;
 
-      const insideX =
-        player.position.x >= p.m.position.x-p.w/2 &&
-        player.position.x <= p.m.position.x+p.w/2;
+      const insideX=
+        player.position.x>=p.m.position.x-p.w/2+0.05 &&
+        player.position.x<=p.m.position.x+p.w/2-0.05;
 
-      const insideZ =
-        player.position.z >= p.m.position.z-p.d/2 &&
-        player.position.z <= p.m.position.z+p.d/2;
+      const insideZ=
+        player.position.z>=p.m.position.z-p.d/2+0.05 &&
+        player.position.z<=p.m.position.z+p.d/2-0.05;
 
-      const crossedTop =
-        previousY >= top && player.position.y <= top;
+      const crossedTop=previousY>=top && nextY<=top;
 
       if(insideX && insideZ && crossedTop){
         player.position.y=top;
@@ -294,14 +332,14 @@ function update(dt){
     }
   }
 
-  // If we're exactly standing on a platform, keep grounded.
+  // Keep player on a platform when standing still.
   if(!grounded && vy<=0){
     for(const p of platforms){
       const top=p.m.position.y+p.h/2;
-      const dx=Math.abs(player.position.x-p.m.position.x);
-      const dz=Math.abs(player.position.z-p.m.position.z);
-      if(Math.abs(player.position.y-top)<0.04 &&
-         dx<=p.w/2 && dz<=p.d/2){
+      const insideX=Math.abs(player.position.x-p.m.position.x)<=p.w/2-.05;
+      const insideZ=Math.abs(player.position.z-p.m.position.z)<=p.d/2-.05;
+
+      if(insideX&&insideZ&&Math.abs(player.position.y-top)<.06){
         player.position.y=top;
         vy=0;
         grounded=true;
@@ -310,18 +348,23 @@ function update(dt){
     }
   }
 
-  // Animation is driven only by horizontal movement.
   if(runAction)runAction.paused=!moving;
   if(mixer)mixer.update(dt);
 
-  // Respawn if the player falls below the course.
-  if(player.position.y < -12){
-    player.position.copy(spawn);
-    vy=0;
-    if(bacon)bacon.rotation.y=0;
+  // Reset the Bacon root after animation update so it cannot slide away.
+  if(bacon){
+    bacon.position.copy(baconBasePosition);
+    bacon.rotation.x=baconBaseRotation.x;
+    bacon.rotation.z=baconBaseRotation.z;
+    bacon.rotation.y=moving?Math.atan2(x,z):baconBaseRotation.y;
   }
 
-  if(player.position.z < -88 && player.position.y > 7){
+  if(player.position.y<-12){
+    player.position.copy(spawn);
+    vy=0;
+  }
+
+  if(player.position.z<-88 && player.position.y>7){
     finished=true;
     document.getElementById("win").style.display="flex";
   }
