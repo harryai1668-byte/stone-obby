@@ -164,14 +164,11 @@ loader.load(
       const size = box3.getSize(new THREE.Vector3());
       const center = box3.getCenter(new THREE.Vector3());
 
-      // Normalize model to about 2.2 units tall.
-      const targetHeight = 2.2;
-      const scale = targetHeight / Math.max(size.y,0.001);
-      model.scale.setScalar(scale);
+      // 🥓 Roblox-style Bacon size
+      model.scale.set(0.45, 0.45, 0.45);
 
+      // Put Bacon's feet on the platform
       const scaledBox = new THREE.Box3().setFromObject(model);
-      const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-      model.position.sub(scaledCenter);
       model.position.y -= scaledBox.min.y;
 
       visual = model;
