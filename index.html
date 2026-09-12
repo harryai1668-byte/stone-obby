@@ -1,45 +1,3 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Stone Obby</title>
-<style>
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Arial,sans-serif;background:#87ceeb;touch-action:none}
-canvas{display:block}
-#ui{position:fixed;inset:0;pointer-events:none}
-#title{position:absolute;top:18px;left:50%;transform:translateX(-50%);font-size:28px;font-weight:800;color:white;text-shadow:0 2px 5px #000}
-#hint{position:absolute;top:58px;left:50%;transform:translateX(-50%);color:white;text-shadow:0 2px 4px #000;font-size:14px;text-align:center}
-#jump{display:none;position:absolute;right:25px;bottom:35px;width:88px;height:88px;border-radius:50%;border:3px solid white;background:#ffffff55;color:white;font-weight:800;font-size:16px;pointer-events:auto}
-#joyBase{display:none;position:absolute;left:25px;bottom:35px;width:120px;height:120px;border-radius:50%;border:3px solid white;background:#ffffff33;pointer-events:auto}
-#joyKnob{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px;border-radius:50%;background:#ffffffaa}
-#finish{display:none;position:absolute;inset:0;background:#0008;align-items:center;justify-content:center;color:white;text-align:center;pointer-events:auto}
-#finishBox{background:#222;padding:28px 35px;border-radius:18px;box-shadow:0 8px 30px #0008}
-#finishBox h1{margin:0 0 10px;font-size:38px}
-#finishBox button{padding:12px 22px;border:0;border-radius:10px;font-weight:700;cursor:pointer}
-@media(max-width:800px){
-  #jump,#joyBase{display:block}
-  #title{font-size:23px}
-  #hint{font-size:12px;top:52px}
-}
-</style>
-</head>
-<body>
-<div id="ui">
-  <div id="title">🥓 STONE OBBY</div>
-  <div id="hint">WASD để di chuyển • SPACE để nhảy</div>
-  <div id="joyBase"><div id="joyKnob"></div></div>
-  <button id="jump">JUMP</button>
-  <div id="finish">
-    <div id="finishBox">
-      <h1>🏆 YOU WIN!</h1>
-      <p>Bro đã hoàn thành Stone Obby 😎</p>
-      <button onclick="location.reload()">Chơi lại</button>
-    </div>
-  </div>
-</div>
-
 <script type="importmap">
 {
   "imports": {
@@ -55,299 +13,341 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 35, 180);
 
-const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 500);
-camera.position.set(0,8,12);
+const camera = new THREE.PerspectiveCamera(
+  70,
+  innerWidth / innerHeight,
+  0.1,
+  500
+);
 
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.setSize(innerWidth,innerHeight);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0xffffff,0x668866,2.2));
+// LIGHT
+scene.add(new THREE.HemisphereLight(0xffffff, 0x668866, 2));
 
-const sun = new THREE.DirectionalLight(0xffffff,2.5);
-sun.position.set(20,35,20);
+const sun = new THREE.DirectionalLight(0xffffff, 2.5);
+sun.position.set(20, 30, 20);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048,2048);
 scene.add(sun);
+
+// =======================
+// MAP
+// =======================
 
 const platforms = [];
 
-function box(x,y,z,w,h,d,color=0x777777){
+function platform(x, y, z, w, h, d) {
   const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(w,h,d),
-    new THREE.MeshStandardMaterial({color,roughness:.9})
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
-  mesh.position.set(x,y,z);
+
+  mesh.position.set(x, y, z);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
+
   scene.add(mesh);
-  platforms.push({mesh,w,h,d});
-  return mesh;
+
+  platforms.push({
+    mesh,
+    w,
+    h,
+    d
+  });
 }
 
-// Map
-box(0,-1,0,14,2,14,0x666666);
-box(0,0,-10,9,1.5,7,0x777777);
-box(5,1,-20,7,1.5,7,0x777777);
-box(-2,2,-30,7,1.5,7,0x777777);
-box(6,3,-40,7,1.5,7,0x777777);
-box(0,4,-50,8,1.5,7,0x777777);
-box(-7,5,-60,7,1.5,7,0x777777);
-box(0,6,-70,9,1.5,8,0x777777);
-box(7,7,-81,7,1.5,7,0x777777);
-box(0,8,-92,12,1.5,10,0x777777);
+// START
+platform(0, -1, 0, 14, 2, 14);
 
-// Grass patches
-for(const p of platforms){
-  const top = new THREE.Mesh(
-    new THREE.BoxGeometry(p.w-.12,.12,p.d-.12),
-    new THREE.MeshStandardMaterial({color:0x5f9e45,roughness:1})
-  );
-  top.position.set(p.mesh.position.x,p.mesh.position.y+p.h/2+.06,p.mesh.position.z);
-  top.receiveShadow=true;
-  scene.add(top);
-}
+// OBBY
+platform(0, 0, -10, 9, 1.5, 7);
+platform(5, 1, -20, 7, 1.5, 7);
+platform(-2, 2, -30, 7, 1.5, 7);
+platform(6, 3, -40, 7, 1.5, 7);
+platform(0, 4, -50, 8, 1.5, 7);
+platform(-7, 5, -60, 7, 1.5, 7);
+platform(0, 6, -70, 9, 1.5, 8);
+platform(7, 7, -81, 7, 1.5, 7);
+platform(0, 8, -92, 12, 1.5, 10);
 
-// Finish flag
-const pole = new THREE.Mesh(
-  new THREE.CylinderGeometry(.08,.08,4,12),
-  new THREE.MeshStandardMaterial({color:0xeeeeee})
-);
-pole.position.set(0,10,-92);
-pole.castShadow=true;
-scene.add(pole);
+// =======================
+// BACON PLAYER
+// =======================
 
-const flag = new THREE.Mesh(
-  new THREE.PlaneGeometry(2.2,1.2),
-  new THREE.MeshStandardMaterial({color:0xff3333,side:THREE.DoubleSide})
-);
-flag.position.set(1.05,11,-92);
-scene.add(flag);
-
-// Player
 const player = new THREE.Group();
 scene.add(player);
 
-let visual = null;
+let baconModel = null;
 let mixer = null;
-let modelReady = false;
-
-function addFallback(){
-  if(visual) return;
-  visual = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(.55,1.1,6,12),
-    new THREE.MeshStandardMaterial({color:0x3b82f6})
-  );
-  body.position.y=1.05;
-  body.castShadow=true;
-  visual.add(body);
-  player.add(visual);
-}
 
 const loader = new GLTFLoader();
+
 loader.load(
   "./scene.gltf",
-  gltf=>{
-    try{
-      const model = gltf.scene;
-      model.traverse(o=>{
-        if(o.isMesh){o.castShadow=true;o.receiveShadow=true}
-      });
 
-      const box3 = new THREE.Box3().setFromObject(model);
-      const size = box3.getSize(new THREE.Vector3());
-      const center = box3.getCenter(new THREE.Vector3());
+  function (gltf) {
 
-      // Normalize model to about 2.2 units tall.
-      const targetHeight = 2.2;
-      const scale = targetHeight / Math.max(size.y,0.001);
-      model.scale.setScalar(scale);
+    baconModel = gltf.scene;
 
-      const scaledBox = new THREE.Box3().setFromObject(model);
-      const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-      model.position.sub(scaledCenter);
-      model.position.y -= scaledBox.min.y;
-
-      visual = model;
-      player.add(model);
-      modelReady = true;
-
-      if(gltf.animations && gltf.animations.length){
-        mixer = new THREE.AnimationMixer(model);
-        const action = mixer.clipAction(gltf.animations[0]);
-        action.play();
+    baconModel.traverse(function (obj) {
+      if (obj.isMesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
       }
-    }catch(e){
-      console.error("Model setup error:",e);
-      addFallback();
+    });
+
+    // Tự căn kích thước Bacon
+    const box = new THREE.Box3().setFromObject(baconModel);
+    const size = box.getSize(new THREE.Vector3());
+
+    const targetHeight = 2.4;
+    const scale = targetHeight / size.y;
+
+    baconModel.scale.setScalar(scale);
+
+    // Đặt chân Bacon xuống đất
+    const box2 = new THREE.Box3().setFromObject(baconModel);
+
+    baconModel.position.y -= box2.min.y;
+
+    player.add(baconModel);
+
+    // Animation có sẵn trong model
+    if (gltf.animations && gltf.animations.length > 0) {
+
+      mixer = new THREE.AnimationMixer(baconModel);
+
+      const animation = gltf.animations[0];
+
+      const action = mixer.clipAction(animation);
+
+      action.play();
+
+      console.log(
+        "🥓 Bacon animation:",
+        animation.name
+      );
     }
+
+    console.log("🥓 BACON LOADED!");
   },
+
   undefined,
-  err=>{
-    console.error("Không load được ./scene.gltf:",err);
-    addFallback();
+
+  function (error) {
+    console.error("❌ BACON LOAD ERROR:", error);
   }
 );
 
-addFallback();
-
-const spawn = new THREE.Vector3(0,1.2,3);
+// Spawn
+const spawn = new THREE.Vector3(0, 1.3, 3);
 player.position.copy(spawn);
 
-let velocityY=0;
-let grounded=false;
-let finished=false;
+// =======================
+// PHYSICS
+// =======================
 
-const keys={};
-addEventListener("keydown",e=>{
-  keys[e.code]=true;
-  if(e.code==="Space") e.preventDefault();
-});
-addEventListener("keyup",e=>keys[e.code]=false);
-addEventListener("blur",()=>Object.keys(keys).forEach(k=>keys[k]=false));
+let velocityY = 0;
+let grounded = false;
 
-let joyX=0, joyY=0, joyActive=false;
-const joyBase=document.getElementById("joyBase");
-const joyKnob=document.getElementById("joyKnob");
+const gravity = -20;
+const jumpPower = 7.5;
+const speed = 7;
 
-function setJoy(e){
-  const r=joyBase.getBoundingClientRect();
-  const cx=r.left+r.width/2, cy=r.top+r.height/2;
-  let x=e.clientX-cx, y=e.clientY-cy;
-  const max=48;
-  const len=Math.hypot(x,y);
-  if(len>max){x=x/len*max;y=y/len*max}
-  joyX=x/max;
-  joyY=y/max;
-  joyKnob.style.transform=`translate(${x}px,${y}px)`;
-}
-joyBase.addEventListener("pointerdown",e=>{
-  joyActive=true; joyBase.setPointerCapture(e.pointerId); setJoy(e);
-});
-joyBase.addEventListener("pointermove",e=>{if(joyActive)setJoy(e)});
-joyBase.addEventListener("pointerup",()=>{
-  joyActive=false;joyX=0;joyY=0;joyKnob.style.transform="translate(0,0)";
-});
-joyBase.addEventListener("pointercancel",()=>{
-  joyActive=false;joyX=0;joyY=0;joyKnob.style.transform="translate(0,0)";
-});
+// =======================
+// KEYBOARD
+// =======================
 
-let jumpPressed=false;
-const jumpBtn=document.getElementById("jump");
-jumpBtn.addEventListener("pointerdown",e=>{e.preventDefault();jumpPressed=true});
+const keys = {};
 
-function respawn(){
-  player.position.copy(spawn);
-  velocityY=0;
-}
+addEventListener("keydown", e => {
 
-function jump(){
-  if(grounded){
-    velocityY=7.5;
-    grounded=false;
-  }
-}
+  keys[e.code] = true;
 
-function moveInput(){
-  let x=0,z=0;
-  if(keys.KeyA)x-=1;
-  if(keys.KeyD)x+=1;
-  if(keys.KeyW)z-=1;
-  if(keys.KeyS)z+=1;
-
-  if(Math.abs(joyX)>.05 || Math.abs(joyY)>.05){
-    x=joyX;
-    z=joyY;
+  if (e.code === "Space") {
+    e.preventDefault();
   }
 
-  const len=Math.hypot(x,z);
-  if(len>1){x/=len;z/=len}
-  return {x,z};
+});
+
+addEventListener("keyup", e => {
+  keys[e.code] = false;
+});
+
+// =======================
+// JUMP
+// =======================
+
+function jump() {
+
+  if (grounded) {
+
+    velocityY = jumpPower;
+
+    grounded = false;
+
+  }
+
 }
 
-const clock=new THREE.Clock();
+// =======================
+// UPDATE
+// =======================
 
-function updatePlayer(dt){
-  if(finished)return;
+const clock = new THREE.Clock();
 
-  const input=moveInput();
-  const speed=7;
+function update(dt) {
 
-  player.position.x += input.x*speed*dt;
-  player.position.z += input.z*speed*dt;
+  let x = 0;
+  let z = 0;
 
-  if(keys.Space || jumpPressed){
-    jumpPressed=false;
-    keys.Space=false;
+  if (keys.KeyW) z -= 1;
+  if (keys.KeyS) z += 1;
+  if (keys.KeyA) x -= 1;
+  if (keys.KeyD) x += 1;
+
+  const length = Math.hypot(x, z);
+
+  if (length > 0) {
+
+    x /= length;
+    z /= length;
+
+    player.position.x += x * speed * dt;
+    player.position.z += z * speed * dt;
+
+    // Bacon quay theo hướng chạy
+    player.rotation.y = Math.atan2(x, z);
+
+  }
+
+  if (keys.Space) {
+
     jump();
+
+    keys.Space = false;
+
   }
 
-  velocityY -= 20*dt;
-  player.position.y += velocityY*dt;
+  // GRAVITY
+  velocityY += gravity * dt;
 
-  grounded=false;
+  player.position.y += velocityY * dt;
 
-  // Simple top-surface collision.
-  for(const p of platforms){
-    const m=p.mesh;
-    const px=player.position.x, pz=player.position.z;
-    const insideX=Math.abs(px-m.position.x) <= p.w/2;
-    const insideZ=Math.abs(pz-m.position.z) <= p.d/2;
+  grounded = false;
 
-    if(insideX && insideZ){
-      const top=m.position.y+p.h/2;
-      if(player.position.y <= top+1.25 && player.position.y >= top-1.0 && velocityY<=0){
-        player.position.y=top+1.2;
-        velocityY=0;
-        grounded=true;
-      }
+  // COLLISION
+  for (const p of platforms) {
+
+    const m = p.mesh;
+
+    const insideX =
+      Math.abs(player.position.x - m.position.x)
+      <= p.w / 2;
+
+    const insideZ =
+      Math.abs(player.position.z - m.position.z)
+      <= p.d / 2;
+
+    const top =
+      m.position.y + p.h / 2;
+
+    if (
+      insideX &&
+      insideZ &&
+      player.position.y <= top + 1.3 &&
+      player.position.y >= top - 1 &&
+      velocityY <= 0
+    ) {
+
+      player.position.y = top + 1.2;
+
+      velocityY = 0;
+
+      grounded = true;
+
     }
+
   }
 
-  // Keep player roughly inside map area.
-  player.position.x=THREE.MathUtils.clamp(player.position.x,-14,14);
+  // FALL = RESPAWN
+  if (player.position.y < -10) {
 
-  if(player.position.y < -12 || player.position.z > 15) respawn();
+    player.position.copy(spawn);
 
-  // Finish trigger
-  if(player.position.z < -88 && player.position.y > 7){
-    finished=true;
-    document.getElementById("finish").style.display="flex";
+    velocityY = 0;
+
   }
 
-  if(mixer)mixer.update(dt);
+  // ANIMATION
+  if (mixer) {
+
+    mixer.update(dt);
+
+  }
+
 }
 
-function updateCamera(dt){
-  const target=new THREE.Vector3(
+// =======================
+// CAMERA
+// =======================
+
+function updateCamera(dt) {
+
+  const desired = new THREE.Vector3(
     player.position.x,
-    player.position.y+3.2,
-    player.position.z+7.5
+    player.position.y + 4,
+    player.position.z + 8
   );
-  camera.position.lerp(target,1-Math.pow(.001,dt));
-  camera.lookAt(player.position.x,player.position.y+1,player.position.z-2);
+
+  camera.position.lerp(
+    desired,
+    1 - Math.pow(0.001, dt)
+  );
+
+  camera.lookAt(
+    player.position.x,
+    player.position.y + 1,
+    player.position.z - 2
+  );
+
 }
 
-addEventListener("resize",()=>{
-  camera.aspect=innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
-});
+// =======================
+// LOOP
+// =======================
 
-function animate(){
+function animate() {
+
   requestAnimationFrame(animate);
-  const dt=Math.min(clock.getDelta(),.033);
-  updatePlayer(dt);
+
+  const dt = Math.min(clock.getDelta(), 0.033);
+
+  update(dt);
   updateCamera(dt);
-  renderer.render(scene,camera);
+
+  renderer.render(scene, camera);
+
 }
+
 animate();
+
+// RESIZE
+addEventListener("resize", () => {
+
+  camera.aspect = innerWidth / innerHeight;
+
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(
+    innerWidth,
+    innerHeight
+  );
+
+});
 </script>
-</body>
-</html>
