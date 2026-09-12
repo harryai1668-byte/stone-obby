@@ -137,65 +137,57 @@ let visual = null;
 let mixer = null;
 let modelReady = false;
 
-function addFallback(){
-  if(visual) return;
-  visual = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(.55,1.1,6,12),
-    new THREE.MeshStandardMaterial({color:0x3b82f6})
-  );
-  body.position.y=1.05;
-  body.castShadow=true;
-  visual.add(body);
-  player.add(visual);
-}
-
 const loader = new GLTFLoader();
+
 loader.load(
-  "./scene.gltf",
-  gltf=>{
-    try{
-      const model = gltf.scene;
-      model.traverse(o=>{
-        if(o.isMesh){o.castShadow=true;o.receiveShadow=true}
-      });
+  "./scene.gltf?v=roblox1",
+  (gltf) => {
+    const model = gltf.scene;
 
-      const box3 = new THREE.Box3().setFromObject(model);
-      const size = box3.getSize(new THREE.Vector3());
-      const center = box3.getCenter(new THREE.Vector3());
+    model.traverse((obj) => {
+      if (obj.isMesh) {
+        obj.visible = true;
+        obj.castShadow = true;
+        obj.receiveShadow = true;
 
-      // 🥓 Roblox-style size + center the rig
-      const rawBox = new THREE.Box3().setFromObject(model);
-      const rawSize = rawBox.getSize(new THREE.Vector3());
-      const targetHeight = 2.1;
-      const scale = targetHeight / Math.max(rawSize.y, 0.001);
-      model.scale.setScalar(scale);
-
-      // Recalculate after scaling and center the whole Bacon rig.
-      const finalBox = new THREE.Box3().setFromObject(model);
-      const finalCenter = finalBox.getCenter(new THREE.Vector3());
-      model.position.x -= finalCenter.x;
-      model.position.z -= finalCenter.z;
-      model.position.y -= finalBox.min.y;
-
-      visual = model;
-      player.add(model);
-      modelReady = true;
-
-      if(gltf.animations && gltf.animations.length){
-        mixer = new THREE.AnimationMixer(model);
-        const action = mixer.clipAction(gltf.animations[0]);
-        action.play();
+        if (obj.material) {
+          obj.material.transparent = false;
+          obj.material.opacity = 1;
+          obj.material.depthWrite = true;
+        }
       }
-    }catch(e){
-      console.error("Model setup error:",e);
-      addFallback();
+    });
+
+    // The uploaded Bacon asset is about 5.56 units tall.
+    // 0.36x gives roughly 2 Roblox-style studs.
+    model.scale.setScalar(0.36);
+
+    // Center the whole imported rig around the player.
+    model.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(model);
+    const center = bounds.getCenter(new THREE.Vector3());
+
+    model.position.x -= center.x;
+    model.position.z -= center.z;
+    model.position.y -= bounds.min.y;
+
+    player.add(model);
+    visual = model;
+    modelReady = true;
+
+    if (gltf.animations && gltf.animations.length > 0) {
+      mixer = new THREE.AnimationMixer(model);
+      const action = mixer.clipAction(gltf.animations[0]);
+      action.reset();
+      action.play();
+      console.log("🥓 BACON LOADED:", gltf.animations[0].name);
+    } else {
+      console.log("🥓 BACON LOADED (no animation clip)");
     }
   },
   undefined,
-  err=>{
-    console.error("Không load được ./scene.gltf:",err);
-    addFallback();
+  (error) => {
+    console.error("❌ BACON MODEL ERROR:", error);
   }
 );
 
