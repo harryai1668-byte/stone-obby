@@ -164,12 +164,19 @@ loader.load(
       const size = box3.getSize(new THREE.Vector3());
       const center = box3.getCenter(new THREE.Vector3());
 
-      // 🥓 Roblox-style Bacon size
-      model.scale.set(0.45, 0.45, 0.45);
+      // 🥓 Roblox-style size + center the rig
+      const rawBox = new THREE.Box3().setFromObject(model);
+      const rawSize = rawBox.getSize(new THREE.Vector3());
+      const targetHeight = 2.1;
+      const scale = targetHeight / Math.max(rawSize.y, 0.001);
+      model.scale.setScalar(scale);
 
-      // Put Bacon's feet on the platform
-      const scaledBox = new THREE.Box3().setFromObject(model);
-      model.position.y -= scaledBox.min.y;
+      // Recalculate after scaling and center the whole Bacon rig.
+      const finalBox = new THREE.Box3().setFromObject(model);
+      const finalCenter = finalBox.getCenter(new THREE.Vector3());
+      model.position.x -= finalCenter.x;
+      model.position.z -= finalCenter.z;
+      model.position.y -= finalBox.min.y;
 
       visual = model;
       player.add(model);
@@ -191,8 +198,6 @@ loader.load(
     addFallback();
   }
 );
-
-addFallback();
 
 const spawn = new THREE.Vector3(0,1.2,3);
 player.position.copy(spawn);
