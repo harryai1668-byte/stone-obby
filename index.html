@@ -231,55 +231,101 @@ function update(dt){
   if(finished)return;
 
   let x=0,z=0;
-  if(keys.KeyA)x-=1;if(keys.KeyD)x+=1;
-  if(keys.KeyW)z-=1;if(keys.KeyS)z+=1;
+  if(keys.KeyA)x-=1;
+  if(keys.KeyD)x+=1;
+  if(keys.KeyW)z-=1;
+  if(keys.KeyS)z+=1;
   if(joyOn){x=joyX;z=joyY}
 
   const len=Math.hypot(x,z);
   if(len>1){x/=len;z/=len}
   moving=Math.hypot(x,z)>.08;
 
-  player.position.x+=x*7*dt;
-  player.position.z+=z*7*dt;
+  // Horizontal movement belongs ONLY to the player root.
+  player.position.x += x*7*dt;
+  player.position.z += z*7*dt;
 
-  if(moving && bacon) bacon.rotation.y=Math.atan2(x,z);
-
-  if(keys.Space||jumpPressed){
-    keys.Space=false;jumpPressed=false;jump();
+  // Bacon visual faces the direction it travels.
+  if(moving && bacon){
+    bacon.rotation.y=Math.atan2(x,z);
   }
 
+  if(keys.Space||jumpPressed){
+    keys.Space=false;
+    jumpPressed=false;
+    jump();
+  }
+
+  // Save the previous feet height for swept vertical collision.
+  const previousY=player.position.y;
+
   vy-=20*dt;
-  player.position.y+=vy*dt;
+  const nextY=previousY+vy*dt;
+  player.position.y=nextY;
   grounded=false;
 
-  for(const p of platforms){
-    const top=p.m.position.y+p.h/2;
-    const ix=Math.abs(player.position.x-p.m.position.x)<=p.w/2;
-    const iz=Math.abs(player.position.z-p.m.position.z)<=p.d/2;
-    if(ix&&iz&&player.position.y<=top+1.25&&player.position.y>=top-1&&vy<=0){
-      player.position.y=top;
-      vy=0;grounded=true;
+  /*
+    Player Y = feet position.
+    A platform can only be landed on while descending and while the feet
+    cross the platform top from above. This prevents jumping THROUGH steps
+    and avoids the old "top+1.25" collision window.
+  */
+  if(vy<=0){
+    for(const p of platforms){
+      const top=p.m.position.y+p.h/2;
+
+      const insideX =
+        player.position.x >= p.m.position.x-p.w/2 &&
+        player.position.x <= p.m.position.x+p.w/2;
+
+      const insideZ =
+        player.position.z >= p.m.position.z-p.d/2 &&
+        player.position.z <= p.m.position.z+p.d/2;
+
+      const crossedTop =
+        previousY >= top && player.position.y <= top;
+
+      if(insideX && insideZ && crossedTop){
+        player.position.y=top;
+        vy=0;
+        grounded=true;
+        break;
+      }
     }
   }
 
-  if(runAction){
-    // The asset's only clip is treated as the run animation.
-    // Standing still = completely paused.
-    runAction.paused=!moving;
+  // If we're exactly standing on a platform, keep grounded.
+  if(!grounded && vy<=0){
+    for(const p of platforms){
+      const top=p.m.position.y+p.h/2;
+      const dx=Math.abs(player.position.x-p.m.position.x);
+      const dz=Math.abs(player.position.z-p.m.position.z);
+      if(Math.abs(player.position.y-top)<0.04 &&
+         dx<=p.w/2 && dz<=p.d/2){
+        player.position.y=top;
+        vy=0;
+        grounded=true;
+        break;
+      }
+    }
   }
+
+  // Animation is driven only by horizontal movement.
+  if(runAction)runAction.paused=!moving;
   if(mixer)mixer.update(dt);
 
-  if(player.position.y<-12) {
+  // Respawn if the player falls below the course.
+  if(player.position.y < -12){
     player.position.copy(spawn);
     vy=0;
+    if(bacon)bacon.rotation.y=0;
   }
 
-  if(player.position.z<-88 && player.position.y>7){
+  if(player.position.z < -88 && player.position.y > 7){
     finished=true;
     document.getElementById("win").style.display="flex";
   }
 }
-
 function cameraUpdate(dt){
   const target=new THREE.Vector3(
     player.position.x,
