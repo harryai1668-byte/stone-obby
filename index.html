@@ -1,507 +1,97 @@
-<!doctype html>
-<html lang="vi">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Stone Obby</title>
+from pathlib import Path
+import zipfile, textwrap
+
+root=Path("/mnt/data/noob_duel_v1")
+root.mkdir(exist_ok=True)
+
+client = r'''<!doctype html>
+<html><head><meta charset="utf-8"><title>Noob Duel</title>
 <style>
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Arial,sans-serif;background:#87ceeb;touch-action:none}
-canvas{display:block}
-#title{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:5;color:white;text-align:center;font-size:27px;font-weight:900;text-shadow:0 2px 5px #333;pointer-events:none}
-#hint{position:fixed;top:51px;left:50%;transform:translateX(-50%);z-index:5;color:white;font-size:14px;font-weight:700;text-shadow:0 2px 4px #333;pointer-events:none;white-space:nowrap}
-#joy{display:none;position:fixed;left:25px;bottom:30px;width:120px;height:120px;border:3px solid white;border-radius:50%;background:#ffffff33;z-index:10}
-#knob{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px;border-radius:50%;background:#fff}
-#jump{display:none;position:fixed;right:25px;bottom:30px;width:120px;height:120px;border:3px solid white;border-radius:50%;background:#ffffff33;color:#fff;font-weight:900;font-size:17px;z-index:10}
-#win{display:none;position:fixed;inset:0;z-index:20;align-items:center;justify-content:center;background:#0008}
-#winbox{background:#222;color:white;padding:30px 40px;border-radius:18px;text-align:center;box-shadow:0 10px 40px #0008}
-#win button{border:0;border-radius:10px;padding:12px 22px;font-weight:800;cursor:pointer}
-@media(max-width:800px){#joy,#jump{display:block}#title{font-size:23px}}
-</style>
-</head>
-<body>
-<div id="title">🪨 STONE OBBY</div>
-<div id="hint">WASD để di chuyển • SPACE để nhảy</div>
-<div id="joy"><div id="knob"></div></div>
-<button id="jump">JUMP</button>
-<div id="win"><div id="winbox"><h1>🎉 YOU WIN!</h1><button onclick="location.reload()">Chơi lại</button></div></div>
+html,body{margin:0;overflow:hidden;background:#111;font-family:Arial}
+#ui{position:fixed;z-index:5;left:15px;top:15px;color:white;background:#0009;padding:12px;border-radius:10px}
+#shop{position:fixed;z-index:6;right:15px;top:15px;color:white;background:#000b;padding:12px;border-radius:10px}
+button{margin:4px;padding:7px 10px;border:0;border-radius:7px;cursor:pointer}
+</style></head><body>
+<div id="ui">Connecting...<br>HP: <span id="hp">100</span> | Coins: <span id="coins">0</span><br><span id="status"></span></div>
+<div id="shop"><b>SKINS</b><div id="skins"></div></div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x87ceeb);
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,500);
+const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x555555,2));
+const sun=new THREE.DirectionalLight(0xffffff,2);sun.position.set(10,20,10);scene.add(sun);
+const floor=new THREE.Mesh(new THREE.BoxGeometry(40,1,30),new THREE.MeshStandardMaterial({color:0x4c9a43}));floor.position.y=-.5;scene.add(floor);
 
-<script type="module">
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+const keys={}; addEventListener('keydown',e=>keys[e.code]=true); addEventListener('keyup',e=>keys[e.code]=false);
+let yaw=0,pitch=.25,drag=false,lx=0,ly=0; addEventListener('contextmenu',e=>e.preventDefault());
+addEventListener('mousedown',e=>{if(e.button==2){drag=true;lx=e.clientX;ly=e.clientY}});
+addEventListener('mouseup',e=>{if(e.button==2)drag=false});
+addEventListener('mousemove',e=>{if(!drag)return;yaw-=(e.clientX-lx)*.008;pitch+=(e.clientY-ly)*.008;pitch=Math.max(-.2,Math.min(1,pitch));lx=e.clientX;ly=e.clientY});
 
-const scene=new THREE.Scene();
-scene.background=new THREE.Color(0x87ceeb);
-scene.fog=new THREE.Fog(0x87ceeb,55,220);
-
-const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,500);
-const renderer=new THREE.WebGLRenderer({antialias:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.setSize(innerWidth,innerHeight);
-renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.shadowMap.enabled=true;
-renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-document.body.appendChild(renderer.domElement);
-
-scene.add(new THREE.HemisphereLight(0xffffff,0x557755,2.1));
-const sun=new THREE.DirectionalLight(0xffffff,2.5);
-sun.position.set(25,45,20); sun.castShadow=true;
-sun.shadow.mapSize.set(2048,2048);
-scene.add(sun);
-
-const platforms=[];
-function platform(x,y,z,w,h,d){
-  const m=new THREE.MeshStandardMaterial({color:0x707070,roughness:.9});
-  const b=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
-  b.position.set(x,y,z); b.castShadow=true;b.receiveShadow=true;scene.add(b);
-  const grass=new THREE.MeshStandardMaterial({color:0x63ad48,roughness:1});
-  const t=new THREE.Mesh(new THREE.BoxGeometry(w-.08,.12,d-.08),grass);
-  t.position.set(x,y+h/2+.06,z);t.receiveShadow=true;scene.add(t);
-  const p={x,y,z,w,h,d,b,t};
-  platforms.push(p);
-  return p;
+function noob(color=0xffe0bd){
+ const g=new THREE.Group();
+ const mat=c=>new THREE.MeshStandardMaterial({color:c});
+ let head=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),mat(color));head.position.y=2.5;g.add(head);
+ let torso=new THREE.Mesh(new THREE.BoxGeometry(1.15,1.3,.65),mat(0x0074bd));torso.position.y=1.45;g.add(torso);
+ let a=new THREE.Mesh(new THREE.BoxGeometry(.38,1.25,.38),mat(color));let b=a.clone();a.position.set(-.78,1.5,0);b.position.set(.78,1.5,0);g.add(a,b);
+ let l=new THREE.Mesh(new THREE.BoxGeometry(.43,1.25,.43),mat(0x3333cc));let r=l.clone();l.position.set(-.3,.25,0);r.position.set(.3,.25,0);g.add(l,r);
+ return g;
 }
+let me=null,others=new Map(),myId=null,hp=100,coins=0,skin='Noob';
+const wsProto=location.protocol==='https:'?'wss':'ws';
+const server=(new URLSearchParams(location.search).get('server'))||`${wsProto}://${location.hostname||'localhost'}:8080`;
+const ws=new WebSocket(server);
+function send(o){if(ws.readyState===1)ws.send(JSON.stringify(o))}
+ws.onopen=()=>{document.querySelector('#status').textContent='Connected • WASD move • Space jump • Left click attack'};
+ws.onmessage=e=>{
+ const m=JSON.parse(e.data);
+ if(m.type==='init'){myId=m.id;coins=m.coins||0;renderShop(m.owned||['Noob']); setSkin(skin)}
+ if(m.type==='state'){for(const p of m.players){if(p.id===myId){if(!me)me=noob();me.position.set(p.x,p.y,p.z);me.rotation.y=p.r}else updateOther(p)}}
+ if(m.type==='coins'){coins=m.coins;document.querySelector('#coins').textContent=coins}
+ if(m.type==='hp'){hp=m.hp;document.querySelector('#hp').textContent=hp}
+ if(m.type==='hit')document.querySelector('#status').textContent=m.text}
+function updateOther(p){let g=others.get(p.id);if(!g){g=noob(0xffd2b0);scene.add(g);others.set(p.id,g)}g.position.set(p.x,p.y,p.z);g.rotation.y=p.r}
+function setSkin(s){skin=s;send({type:'skin',skin:s});document.querySelector('#status').textContent='Skin: '+s}
+function renderShop(owned){const el=document.querySelector('#skins');el.innerHTML='';[['Noob',0],['Red',50],['Ninja',100],['Golden',200]].forEach(([n,c])=>{let b=document.createElement('button');b.textContent=n+' '+(c?'🪙'+c:'FREE');b.onclick=()=>send({type:'buy',skin:n,cost:c});el.appendChild(b)})}
+addEventListener('keydown',e=>{if(e.code==='Space')send({type:'jump'})});
+addEventListener('mousedown',e=>{if(e.button===0)send({type:'attack'})});
+setInterval(()=>{let x=0,z=0;if(keys.KeyW)z--;if(keys.KeyS)z++;if(keys.KeyA)x--;if(keys.KeyD)x++;let l=Math.hypot(x,z)||1;x/=l;z/=l;send({type:'move',x,z,yaw})},50);
+function animate(){requestAnimationFrame(animate);if(me){camera.position.set(me.position.x+Math.sin(yaw)*8,me.position.y+5+Math.sin(pitch)*3,me.position.z+Math.cos(yaw)*8);camera.lookAt(me.position.x,me.position.y+1,me.position.z)}renderer.render(scene,camera)}animate();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script></body></html>'''
 
-/* ===== OBBY MAP: closer steps + mixed challenges ===== */
-// The original step gaps are shortened by about 1 mm per gap.
-platform(0,-1,0,14,2,14);
-platform(0,0,-9.999,9,1.5,7);
-platform(5,1,-19.998,7,1.5,7);
-platform(-2,2,-29.997,7,1.5,7);
-
-// Checkpoint 1 area
-platform(6,3,-39.996,7,1.5,7);
-
-// Narrow zig-zag balance section: less jumping, more precision.
-platform(2,3.7,-48.995,2.2,1.1,7);
-platform(-3,4.4,-56.994,2.2,1.1,6);
-platform(2,5.1,-63.993,2.2,1.1,6);
-
-// Moving platform section.
-const movingP=platform(0,5.8,-70.992,3.2,1.1,4);
-
-// Wider recovery platform / checkpoint 2.
-platform(0,6.8,-78.991,8,1.5,7);
-
-// Side-to-side precision platforms.
-platform(-5,7.8,-87.990,3,1.2,4);
-platform(4,8.7,-94.989,3,1.2,4);
-platform(0,9.6,-101.988,5,1.5,6);
-
-// Final balance platform.
-platform(0,10.6,-110.987,2.5,1.1,8);
-
-// Finish platform.
-platform(0,11.8,-120.986,10,1.5,10);
-
-const checkpoints=[
-  {x:6,z:-39.996,y:3.75,active:false},
-  {x:0,z:-78.991,y:7.55,active:false},
-  {x:0,z:-110.987,y:11.15,active:false}
-];
-
-function makeCheckpoint(cp){
-  const base=new THREE.Mesh(
-    new THREE.CylinderGeometry(.65,.65,.10,24),
-    new THREE.MeshStandardMaterial({color:0x22aaff,emissive:0x073b66,emissiveIntensity:.8})
-  );
-  base.position.set(cp.x,cp.y+.05,cp.z);scene.add(base);
-  const ring=new THREE.Mesh(
-    new THREE.TorusGeometry(.72,.07,10,32),
-    new THREE.MeshStandardMaterial({color:0x55ddff,emissive:0x116688,emissiveIntensity:1})
-  );
-  ring.rotation.x=Math.PI/2; ring.position.set(cp.x,cp.y+.12,cp.z);scene.add(ring);
-  cp.mesh=base;cp.ring=ring;
-}
-checkpoints.forEach(makeCheckpoint);
-
-let respawnPoint=new THREE.Vector3(0,0,3);
-let checkpointIndex=-1;
-
-function checkCheckpoints(){
-  for(let i=0;i<checkpoints.length;i++){
-    const c=checkpoints[i];
-    if(Math.hypot(player.position.x-c.x,player.position.z-c.z)<1.35 && player.position.y>c.y-.8){
-      if(i>checkpointIndex){
-        checkpointIndex=i;
-        respawnPoint.set(c.x,c.y+.08,c.z);
-        c.active=true;
-        c.mesh.material.color.setHex(0x55ff88);
-        c.mesh.material.emissive.setHex(0x145522);
-        c.ring.material.color.setHex(0x99ffbb);
-      }
-    }
+server = r'''const WebSocket=require('ws'), fs=require('fs');
+const wss=new WebSocket.Server({port:8080});
+const players=new Map(); let next=1;
+const skins={Noob:0,Red:50,Ninja:100,Golden:200};
+function send(ws,o){if(ws.readyState===1)ws.send(JSON.stringify(o))}
+function broadcast(o){for(const p of players.values())send(p.ws,o)}
+wss.on('connection',ws=>{
+ const id=String(next++); const p={id,ws,x:(players.size?4:-4),y:0,z:0,r:0,hp:100,coins:0,owned:['Noob'],skin:'Noob',vy:0};
+ players.set(id,p); send(ws,{type:'init',id,coins:p.coins,owned:p.owned});
+ ws.on('message',raw=>{
+  let m;try{m=JSON.parse(raw)}catch{return}
+  if(m.type==='move'){p.x+=m.x*.45;p.z+=m.z*.45;p.r=Math.atan2(m.x,m.z);p.x=Math.max(-18,Math.min(18,p.x));p.z=Math.max(-13,Math.min(13,p.z))}
+  if(m.type==='jump'&&p.y<=.01)p.vy=9;
+  if(m.type==='attack'){
+   for(const q of players.values())if(q!==p&&Math.hypot(q.x-p.x,q.z-p.z)<2.3){q.hp-=25;send(q.ws,{type:'hp',hp:q.hp});send(p.ws,{type:'hit',text:'⚔️ Hit!'});
+    if(q.hp<=0){p.coins+=25;p.hp=100;q.hp=100;q.x=q.id%2?4:-4;q.z=0;send(p.ws,{type:'coins',coins:p.coins});send(q.ws,{type:'hp',hp:100});send(p.ws,{type:'hit',text:'🏆 KO! +25 coins')}}
+   }
   }
-}
-
-function respawn(){
-  player.position.set(respawnPoint.x,respawnPoint.y,respawnPoint.z);
-  vy=0;
-  grounded=true;
-  moveX=0;
-  moveZ=0;
-  moving=false;
-}
-
-/* ===== Moving platform ===== */
-let movingTime=0;
-function updateChallenges(dt){
-  movingTime+=dt;
-  const offset=Math.sin(movingTime*1.15)*3.1;
-  movingP.x=offset;
-  movingP.b.position.x=offset;
-  movingP.t.position.x=offset;
-
-  // Rotating hazard bars: touching one resets to the latest checkpoint.
-  for(const h of hazards){
-    h.angle+=h.speed*dt;
-    h.group.rotation.y=h.angle;
-    const dx=player.position.x-h.x, dz=player.position.z-h.z;
-    const c=Math.cos(h.angle), si=Math.sin(h.angle);
-    const localX=dx*c-dz*si, localZ=dx*si+dz*c;
-    if(Math.abs(localX)<h.length/2+.35 && Math.abs(localZ)<.22+.25 &&
-       player.position.y>h.y-.9 && player.position.y<h.y+1.6){
-      respawn();
-      break;
-    }
-  }
-}
-
-const hazards=[];
-function rotatingHazard(x,y,z,length=5,speed=2.2){
-  const group=new THREE.Group();
-  group.position.set(x,y,z);
-  const bar=new THREE.Mesh(
-    new THREE.BoxGeometry(length,.25,.42),
-    new THREE.MeshStandardMaterial({color:0xff4b4b,roughness:.6,emissive:0x330000})
-  );
-  bar.castShadow=true;group.add(bar);scene.add(group);
-  hazards.push({group,x,y,z,length,speed,angle:0});
-}
-rotatingHazard(0,8.05,-80.9,5.5,2.4);
-rotatingHazard(0,11.55,-113.2,4.0,-2.8);
-
-const pole=new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,4,12),new THREE.MeshStandardMaterial({color:0xffffff}));
-pole.position.set(0,13.75,-120.986);scene.add(pole);
-const flag=new THREE.Mesh(new THREE.PlaneGeometry(2.2,1.2),new THREE.MeshStandardMaterial({color:0xff4040,side:THREE.DoubleSide}));
-flag.position.set(1.05,14.7,-120.986);scene.add(flag);
-
-/* ===== NEW PLAYER: stylized hoodie character ===== */
-const player=new THREE.Group(); scene.add(player);
-const visual=new THREE.Group(); player.add(visual);
-
-const mat={
- skin:new THREE.MeshStandardMaterial({color:0xffd6b0,roughness:.75}),
- hair:new THREE.MeshStandardMaterial({color:0x4a2a18,roughness:.85}),
- hoodie:new THREE.MeshStandardMaterial({color:0x3b5cff,roughness:.8}),
- dark:new THREE.MeshStandardMaterial({color:0x20252f,roughness:.85}),
- shoe:new THREE.MeshStandardMaterial({color:0xf3f3f3,roughness:.8}),
- eye:new THREE.MeshBasicMaterial({color:0x151515}),
- white:new THREE.MeshBasicMaterial({color:0xffffff})
-};
-function box(parent,x,y,z,w,h,d,material,rad=0){
-  const g=new THREE.BoxGeometry(w,h,d);
-  const mesh=new THREE.Mesh(g,material);
-  mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);
-  return mesh;
-}
-function sphere(parent,x,y,z,r,material){
-  const m=new THREE.Mesh(new THREE.SphereGeometry(r,24,16),material);
-  m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
-}
-
-/* Feet at local y=0; visual is never used for physics. */
-const leftLeg=box(visual,-.24,.58,0,.34,1.0,.38,mat.dark);
-const rightLeg=box(visual,.24,.58,0,.34,1.0,.38,mat.dark);
-const leftFoot=box(visual,-.24,.08,-.07,.40,.16,.55,mat.shoe);
-const rightFoot=box(visual,.24,.08,-.07,.40,.16,.55,mat.shoe);
-
-const torso=box(visual,0,1.38,0,.92,1.0,.52,mat.hoodie);
-const hood=sphere(visual,0,1.92,.02,.39,mat.hoodie);
-hood.scale.set(1,0.72,.72);
-
-const leftArm=box(visual,-.59,1.39,0,.28,.9,.34,mat.hoodie);
-const rightArm=box(visual,.59,1.39,0,.28,.9,.34,mat.hoodie);
-const leftHand=sphere(visual,-.59,.89,0,.18,mat.skin);
-const rightHand=sphere(visual,.59,.89,0,.18,mat.skin);
-
-const head=sphere(visual,0,2.25,0,.48,mat.skin);
-head.scale.set(.92,1,.9);
-
-/* Hair cap + fringe */
-const hair=sphere(visual,0,2.53,.01,.50,mat.hair);
-hair.scale.set(1,.62,.95);
-for(let i=-2;i<=2;i++){
-  const fringe=sphere(visual,i*.16,2.43,-.42,.15,mat.hair);
-  fringe.scale.set(1,.8,.55);
-}
-/* Eyes + tiny smile, front is -Z */
-sphere(visual,-.17,2.28,-.435,.045,mat.eye);
-sphere(visual,.17,2.28,-.435,.045,mat.eye);
-const mouth=box(visual,0,2.10,-.445,.18,.035,.02,mat.eye);
-
-/* Hoodie drawstring */
-for(const x of [-.08,.08]) box(visual,x,1.75,-.275,.025,.22,.025,mat.white);
-
-/* subtle backpack */
-box(visual,0,1.45,.32,.68,.78,.16,mat.dark);
-
-const spawn=new THREE.Vector3(0,0,3);
-player.position.copy(spawn);
-const R=.30,H=2.55,SPEED=8.2,GRAVITY=18,JUMP=10.5;
-let vy=0,grounded=true,finished=false,moving=false;
-const keys={};
-
-addEventListener("keydown",e=>{keys[e.code]=true;if(e.code==="Space")e.preventDefault()});
-addEventListener("keyup",e=>keys[e.code]=false);
-addEventListener("blur",()=>{for(const k in keys)delete keys[k];joyX=joyY=0;knob.style.transform="translate(0,0)";orbiting=false;document.body.style.cursor="default"});
-
-/* Roblox-style 3D camera: RIGHT MOUSE + DRAG, works while WASD is held. */
-let camYaw=0,camPitch=0,orbiting=false,lastMX=0,lastMY=0;
-const CAM_DIST=8.5,CAM_SENS=.008;
-
-document.addEventListener("contextmenu",e=>e.preventDefault());
-
-document.addEventListener("mousedown",e=>{
-  if(e.button!==2) return;
-  orbiting=true;
-  lastMX=e.clientX;
-  lastMY=e.clientY;
-  document.body.style.cursor="grabbing";
-  e.preventDefault();
+  if(m.type==='buy'&&skins[m.skin]!=null){let c=skins[m.skin];if(!p.owned.includes(m.skin)&&p.coins>=c){p.coins-=c;p.owned.push(m.skin);send(ws,{type:'coins',coins:p.coins});send(ws,{type:'hit',text:'🛒 Bought '+m.skin)}} if(p.owned.includes(m.skin))p.skin=m.skin}
+  if(m.type==='skin'&&p.owned.includes(m.skin))p.skin=m.skin;
+ });
+ ws.on('close',()=>players.delete(id));
 });
+setInterval(()=>{for(const p of players.values()){p.vy-=.45;p.y+=p.vy*.05;if(p.y<0){p.y=0;p.vy=0}}broadcast({type:'state',players:[...players.values()].map(({ws,...q})=>q)})},50);
+console.log('Noob Duel server: ws://localhost:8080');'''
 
-document.addEventListener("mousemove",e=>{
-  if(!orbiting) return;
-  const dx=e.clientX-lastMX;
-  const dy=e.clientY-lastMY;
-  lastMX=e.clientX;
-  lastMY=e.clientY;
-  camYaw-=dx*CAM_SENS;
-  camPitch+=dy*CAM_SENS;
-  camPitch=Math.max(-0.55,Math.min(0.75,camPitch));
-  e.preventDefault();
-});
+(root/'index.html').write_text(client)
+(root/'server.js').write_text(server)
+(root/'package.json').write_text('{"scripts":{"start":"node server.js"},"dependencies":{"ws":"^8.18.0"}}')
+with zipfile.ZipFile('/mnt/data/noob_duel_v1.zip','w',zipfile.ZIP_DEFLATED) as z:
+    for f in root.iterdir(): z.write(f, f.name)
+print('/mnt/data/noob_duel_v1.zip')
 
-function stopOrbit(){
-  orbiting=false;
-  document.body.style.cursor="default";
-}
-document.addEventListener("mouseup",e=>{
-  if(e.button===2) stopOrbit();
-});
-document.addEventListener("mouseleave",()=>{ if(orbiting) stopOrbit(); });
-window.addEventListener("blur",stopOrbit);
-
-
-let joyX=0,joyY=0,joyOn=false;
-const joy=document.getElementById("joy"),knob=document.getElementById("knob");
-function joyMove(e){
- const r=joy.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
- let x=e.clientX-cx,y=e.clientY-cy,len=Math.hypot(x,y),max=48;
- if(len>max){x=x/len*max;y=y/len*max}
- joyX=x/max;joyY=y/max;knob.style.transform=`translate(${x}px,${y}px)`;
-}
-joy.addEventListener("pointerdown",e=>{joyOn=true;joy.setPointerCapture(e.pointerId);joyMove(e)});
-joy.addEventListener("pointermove",e=>{if(joyOn)joyMove(e)});
-function joyUp(){joyOn=false;joyX=joyY=0;knob.style.transform="translate(0,0)"}
-joy.addEventListener("pointerup",joyUp);joy.addEventListener("pointercancel",joyUp);
-let jumpTap=false;
-document.getElementById("jump").addEventListener("pointerdown",()=>jumpTap=true);
-
-function inside(p,x,z){
- return x>p.x-p.w/2-R*.75 && x<p.x+p.w/2+R*.75 &&
-        z>p.z-p.d/2-R*.75 && z<p.z+p.d/2+R*.75;
-}
-function overlapY(p){
- const feet=player.position.y,head=feet+H,b=p.y-p.h/2,t=p.y+p.h/2;
- return head>b+.001 && feet<t-.001;
-}
-/* Solid horizontal collision, sub-stepped to stop tunneling. */
-function moveXZ(dx,dz){
-  const maxStep=.012;
-  const n=Math.max(1,Math.ceil(Math.hypot(dx,dz)/maxStep));
-  const sx=dx/n, sz=dz/n;
-
-  for(let i=0;i<n;i++){
-    // Swept X collision: only stop when we actually CROSS a wall.
-    const oldX=player.position.x;
-    const newX=oldX+sx;
-    player.position.x=newX;
-
-    for(const p of platforms){
-      if(!bodyOverlapsZ(p)) continue;
-      const left=p.x-p.w/2-R;
-      const right=p.x+p.w/2+R;
-
-      if(oldX<=left && newX>left){
-        player.position.x=left-.001;
-      }else if(oldX>=right && newX<right){
-        player.position.x=right+.001;
-      }
-    }
-
-    // Swept Z collision: same rule, so no snapping/teleporting.
-    const oldZ=player.position.z;
-    const newZ=oldZ+sz;
-    player.position.z=newZ;
-
-    for(const p of platforms){
-      if(!bodyOverlapsX(p)) continue;
-      const front=p.z-p.d/2-R;
-      const back=p.z+p.d/2+R;
-
-      if(oldZ<=front && newZ>front){
-        player.position.z=front-.001;
-      }else if(oldZ>=back && newZ<back){
-        player.position.z=back+.001;
-      }
-    }
-  }
-}
-
-function bodyVerticalOverlaps(p){
-  const feet=player.position.y;
-  const head=feet+H;
-  const top=p.y+p.h/2;
-  const bottom=p.y-p.h/2;
-  return head>bottom+.02 && feet<top-.02;
-}
-
-function bodyOverlapsZ(p){
-  if(!grounded) return false;
-  if(!bodyVerticalOverlaps(p)) return false;
-  return player.position.z>p.z-p.d/2-R &&
-         player.position.z<p.z+p.d/2+R;
-}
-
-function bodyOverlapsX(p){
-  if(!grounded) return false;
-  if(!bodyVerticalOverlaps(p)) return false;
-  return player.position.x>p.x-p.w/2-R &&
-         player.position.x<p.x+p.w/2+R;
-}
-function moveY(dt){
-  const maxStep=.008;
-  const n=Math.max(1,Math.ceil(dt/maxStep));
-  const step=dt/n;
-
-  for(let i=0;i<n;i++){
-    const oldY=player.position.y;
-    const oldV=vy;
-    vy-=GRAVITY*step;
-    const nextY=oldY+vy*step;
-
-    let landed=null;
-
-    // Landing / standing: the collision surface is the TOP of the green cap.
-    if(vy<=0){
-      for(const p of platforms){
-        const inX=player.position.x>=p.x-p.w/2+.05 && player.position.x<=p.x+p.w/2-.05;
-        const inZ=player.position.z>=p.z-p.d/2+.05 && player.position.z<=p.z+p.d/2-.05;
-        if(!inX||!inZ) continue;
-
-        const top=p.y+p.h/2;
-
-        // Normal swept landing.
-        if(oldY>=top-.02 && nextY<=top){
-          if(landed===null || top>landed) landed=top;
-        }
-
-        // If already slightly inside the platform while falling/standing,
-        // push the feet back onto the top instead of letting the player sink through.
-        if(oldY<top && oldY>top-.20 && nextY<top){
-          if(landed===null || top>landed) landed=top;
-        }
-      }
-    }
-
-    if(landed!==null){
-      player.position.y=landed;
-      vy=0;
-      grounded=true;
-      continue;
-    }
-
-    // Ceiling collision while jumping upward.
-    if(oldV>0){
-      let ceiling=null;
-      for(const p of platforms){
-        const inX=player.position.x>=p.x-p.w/2+.05 && player.position.x<=p.x+p.w/2-.05;
-        const inZ=player.position.z>=p.z-p.d/2+.05 && player.position.z<=p.z+p.d/2-.05;
-        if(!inX||!inZ) continue;
-
-        const bottom=p.y-p.h/2;
-        if(oldY+H<=bottom && nextY+H>=bottom){
-          if(ceiling===null || bottom<ceiling) ceiling=bottom;
-        }
-      }
-
-      if(ceiling!==null){
-        player.position.y=ceiling-H-.001;
-        vy=0;
-      }else{
-        player.position.y=nextY;
-      }
-    }else{
-      player.position.y=nextY;
-    }
-
-    grounded=false;
-  }
-}
-function animateCharacter(dt){
- const movingNow=moving && grounded;
- const t=performance.now()*.012;
- const swing=movingNow?Math.sin(t)*.55:0;
- leftLeg.rotation.x=swing;rightLeg.rotation.x=-swing;
- leftArm.rotation.x=-swing*.75;rightArm.rotation.x=swing*.75;
- visual.position.y=movingNow?Math.abs(Math.sin(t))*-.035:0;
- /* Face direction of travel. Model's front is -Z. */
- if(moving){
-   const angle=Math.atan2(-moveX,-moveZ);
-   visual.rotation.y=angle;
- }else visual.rotation.y=0;
-}
-let moveX=0,moveZ=0;
-function update(dt){
- if(finished)return;
- let x=0,z=0;
- if(keys.KeyA)x-=1;if(keys.KeyD)x+=1;if(keys.KeyW)z-=1;if(keys.KeyS)z+=1;
- if(joyOn){x=joyX;z=joyY}
- if(Math.hypot(x,z)>1){const l=Math.hypot(x,z);x/=l;z/=l}
-
- // Camera-relative movement: W always moves where the camera is facing.
- const rightX=Math.cos(camYaw), rightZ=-Math.sin(camYaw);
- const forwardX=-Math.sin(camYaw), forwardZ=-Math.cos(camYaw);
- const worldX=rightX*x - forwardX*z;
- const worldZ=rightZ*x - forwardZ*z;
-
- moveX=worldX;moveZ=worldZ;moving=Math.hypot(worldX,worldZ)>.08;
- moveXZ(worldX*SPEED*dt,worldZ*SPEED*dt);
- checkCheckpoints();
- updateChallenges(dt);
- if((keys.Space||jumpTap)&&grounded){keys.Space=false;jumpTap=false;vy=JUMP;grounded=false}
- else {keys.Space=false;jumpTap=false}
- moveY(dt);
- animateCharacter(dt);
- if(player.position.y<-15){respawn()}
- if(player.position.z<-117&&player.position.y>10){finished=true;document.getElementById("win").style.display="flex"}
-}
-const desired=new THREE.Vector3();
-function cam(dt){
- const horizontal=CAM_DIST*Math.cos(camPitch);
- desired.set(
-   player.position.x+Math.sin(camYaw)*horizontal,
-   player.position.y+3.2+Math.sin(camPitch)*CAM_DIST,
-   player.position.z+Math.cos(camYaw)*horizontal
- );
- camera.position.lerp(desired,1-Math.pow(.0008,dt));
- camera.lookAt(player.position.x,player.position.y+1.15,player.position.z);
-}
-const clock=new THREE.Clock();
-function loop(){requestAnimationFrame(loop);const dt=Math.min(clock.getDelta(),.033);update(dt);cam(dt);renderer.render(scene,camera)}
-loop();
-addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
-</script>
-</body>
-</html>
+  
