@@ -1,11 +1,52 @@
 const http = require("http");
 const WebSocket = require("ws");
 
-const PORT = process.env.PORT || 8080;
+const PORT = 8080;
+const rooms = new Map();
 
-// ===============================
-// GAME HTML
-// ===============================
+function id() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function code() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < 5; i++) {
+    s += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return s;
+}
+
+function send(ws, data) {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(data));
+  }
+}
+
+function broadcast(room, data) {
+  room.players.forEach(p => send(p.ws, data));
+}
+
+function player(ws, name) {
+  return {
+    id: id(),
+    ws,
+    name: name || "Noob",
+    x: 0,
+    y: 0,
+    z: 0,
+    hp: 100,
+    coins: 0,
+    ready: false,
+    skin: "noob",
+    vy: 0,
+    room: null
+  };
+}
+
+// =============================
+// HTML GAME
+// =============================
 
 const HTML = `
 <!DOCTYPE html>
@@ -17,51 +58,54 @@ const HTML = `
 
 <style>
 *{box-sizing:border-box}
+
 body{
  margin:0;
  overflow:hidden;
- font-family:Arial,sans-serif;
- background:#6fc7ff;
+ font-family:Arial;
+ background:#75cfff;
 }
-canvas{display:block}
+
+canvas{
+ display:block;
+}
 
 #lobby{
  position:fixed;
  inset:0;
  display:flex;
- justify-content:center;
  align-items:center;
- background:linear-gradient(#55bfff,#9be7ff);
- z-index:10;
+ justify-content:center;
+ background:linear-gradient(#55c7ff,#b9efff);
+ z-index:20;
 }
 
 .panel{
- width:360px;
+ width:370px;
  padding:28px;
+ background:white;
  border-radius:20px;
- background:rgba(255,255,255,.95);
- box-shadow:0 15px 50px rgba(0,0,0,.25);
+ box-shadow:0 15px 50px #0005;
  text-align:center;
 }
 
 h1{
- margin:0 0 8px;
+ margin:0 0 5px;
  font-size:38px;
 }
 
 .sub{
- color:#666;
+ color:#777;
  margin-bottom:20px;
 }
 
 input{
  width:100%;
  padding:13px;
- margin:6px 0;
+ margin:5px 0;
  border:2px solid #ddd;
  border-radius:10px;
  font-size:16px;
- outline:none;
 }
 
 button{
@@ -70,31 +114,38 @@ button{
  margin-top:8px;
  border:0;
  border-radius:10px;
- background:#222;
- color:white;
- font-size:16px;
  font-weight:bold;
+ font-size:16px;
  cursor:pointer;
+ color:white;
+ background:#222;
 }
 
-button:hover{transform:scale(1.02)}
+#create{
+ background:#20a94b;
+}
 
-#create{background:#20a84b}
-#join{background:#1684d8}
-#ready{background:#f0a000}
+#join{
+ background:#1688dc;
+}
 
-#roomBox{
+#ready{
+ background:#f0a000;
+}
+
+#room{
+ display:none;
  margin-top:15px;
  padding:12px;
  background:#eee;
- border-radius:10px;
- display:none;
+ border-radius:12px;
 }
 
 #code{
- font-size:28px;
+ font-size:30px;
  font-weight:bold;
- letter-spacing:5px;
+ letter-spacing:7px;
+ margin:5px;
 }
 
 #status{
@@ -103,11 +154,11 @@ button:hover{transform:scale(1.02)}
 }
 
 #hud{
+ display:none;
  position:fixed;
  inset:0;
  pointer-events:none;
- display:none;
- z-index:5;
+ z-index:10;
 }
 
 #top{
@@ -120,76 +171,75 @@ button:hover{transform:scale(1.02)}
 }
 
 .card{
- background:rgba(0,0,0,.7);
+ background:#000b;
  color:white;
- padding:10px 18px;
+ padding:10px 16px;
  border-radius:12px;
  font-weight:bold;
 }
 
 #hp{
  width:180px;
- height:18px;
- background:#444;
+ height:16px;
+ margin-top:5px;
+ background:#555;
  border-radius:10px;
  overflow:hidden;
- margin-top:5px;
 }
 
 #hpbar{
- width:100%;
  height:100%;
- background:#22dd55;
+ width:100%;
+ background:#24df55;
 }
 
 #shop{
  position:absolute;
  right:15px;
  top:15px;
- width:170px;
+ width:180px;
  pointer-events:auto;
 }
 
-#shop .title{
- background:rgba(0,0,0,.8);
+.shopTitle{
+ background:#000d;
  color:white;
  padding:10px;
  text-align:center;
- border-radius:10px 10px 0 0;
  font-weight:bold;
+ border-radius:10px 10px 0 0;
 }
 
 .skin{
- margin-top:5px;
- padding:10px;
- border-radius:8px;
  background:white;
- color:#111;
+ padding:11px;
+ margin-top:4px;
+ border-radius:8px;
  cursor:pointer;
  font-weight:bold;
 }
 
 #controls{
  position:absolute;
- bottom:15px;
  left:15px;
- background:rgba(0,0,0,.6);
- color:white;
+ bottom:15px;
  padding:12px;
+ background:#000a;
+ color:white;
  border-radius:10px;
  font-size:13px;
 }
 
 #fight{
+ display:none;
  position:absolute;
  left:50%;
- top:42%;
+ top:40%;
  transform:translate(-50%,-50%);
- color:white;
  font-size:70px;
+ color:white;
  font-weight:900;
- text-shadow:4px 4px #000;
- display:none;
+ text-shadow:5px 5px #000;
 }
 </style>
 </head>
@@ -197,44 +247,73 @@ button:hover{transform:scale(1.02)}
 <body>
 
 <div id="lobby">
+
  <div class="panel">
+
    <h1>⚔️ NOOB DUEL</h1>
-   <div class="sub">2 PLAYER ONLINE BATTLE</div>
+   <div class="sub">2 PLAYER ONLINE</div>
 
    <input id="name" placeholder="Tên của bạn">
 
-   <button id="create">🎮 CREATE ROOM</button>
+   <button id="create">
+     🎮 CREATE ROOM
+   </button>
 
-   <input id="roomInput" placeholder="Nhập mã phòng">
+   <input id="roomCodeInput" placeholder="Mã phòng">
 
-   <button id="join">🚪 JOIN ROOM</button>
+   <button id="join">
+     🚪 JOIN ROOM
+   </button>
 
-   <div id="roomBox">
+   <div id="room">
+
      <div>ROOM CODE</div>
+
      <div id="code">-----</div>
-     <div id="players">Players: 1/2</div>
-     <button id="ready">✅ READY</button>
+
+     <div id="count">
+       Players: 1/2
+     </div>
+
+     <button id="ready">
+       ✅ READY
+     </button>
+
    </div>
 
-   <div id="status">Đang kết nối...</div>
+   <div id="status">
+     🔄 Connecting...
+   </div>
+
  </div>
+
 </div>
 
 <div id="hud">
 
  <div id="top">
+
    <div class="card">
-     <div id="playerName">NOOB</div>
-     <div id="hp"><div id="hpbar"></div></div>
+
+     <div id="myName">NOOB</div>
+
+     <div id="hp">
+       <div id="hpbar"></div>
+     </div>
+
    </div>
 
    <div class="card">
      🪙 <span id="coins">0</span>
    </div>
+
  </div>
 
  <div id="shop">
-   <div class="title">🛒 SKINS</div>
+
+   <div class="shopTitle">
+     🛒 SKINS
+   </div>
 
    <div class="skin" onclick="buy('noob')">
      🟨 NOOB — FREE
@@ -245,12 +324,13 @@ button:hover{transform:scale(1.02)}
    </div>
 
    <div class="skin" onclick="buy('ninja')">
-     ⬛ NINJA — 100
+     🥷 NINJA — 100
    </div>
 
    <div class="skin" onclick="buy('gold')">
      🟨 GOLD — 200
    </div>
+
  </div>
 
  <div id="controls">
@@ -260,47 +340,61 @@ button:hover{transform:scale(1.02)}
    RIGHT MOUSE = Camera
  </div>
 
- <div id="fight">FIGHT!</div>
+ <div id="fight">
+   FIGHT!
+ </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
 <script>
 
-let ws;
+let socket;
 let myId=null;
-let roomCode=null;
-let mySkin="noob";
+let players={};
 
-const players={};
-const keys={};
+let scene;
+let camera;
+let renderer;
 
-let scene,camera,renderer;
+let keys={};
+
 let yaw=0;
-let pitch=.35;
-let dragging=false;
-let lastX=0;
-let lastY=0;
+let pitch=.3;
 
-const lobby=document.getElementById("lobby");
-const hud=document.getElementById("hud");
-const status=document.getElementById("status");
+let dragging=false;
+let mx=0;
+let my=0;
+
+// =============================
+// CONNECT
+// =============================
 
 function connect(){
 
- const protocol=location.protocol==="https:" ? "wss://" : "ws://";
+ socket=new WebSocket(
+   (location.protocol==="https:"?"wss://":"ws://")
+   +location.host
+ );
 
- ws=new WebSocket(protocol+location.host);
-
- ws.onopen=()=>{
-   status.innerText="🟢 Connected!";
+ socket.onopen=()=>{
+   document.getElementById("status").innerText=
+     "🟢 Connected!";
  };
 
- ws.onclose=()=>{
-   status.innerText="🔴 Disconnected";
+ socket.onerror=()=>{
+   document.getElementById("status").innerText=
+     "🔴 WebSocket Error";
  };
 
- ws.onmessage=e=>{
+ socket.onclose=()=>{
+   document.getElementById("status").innerText=
+     "🔴 Disconnected";
+ };
+
+ socket.onmessage=e=>{
+
    const m=JSON.parse(e.data);
 
    if(m.type==="welcome"){
@@ -308,51 +402,60 @@ function connect(){
    }
 
    if(m.type==="room"){
-     roomCode=m.code;
+
+     document.getElementById("room").style.display="block";
 
      document.getElementById("code").innerText=m.code;
-     document.getElementById("roomBox").style.display="block";
-     document.getElementById("players").innerText=
+
+     document.getElementById("count").innerText=
        "Players: "+m.players+"/2";
 
-     status.innerText="Phòng đã tạo!";
+     document.getElementById("status").innerText=
+       "🏠 Room created!";
    }
 
-   if(m.type==="readyState"){
-     document.getElementById("players").innerText=
-       "Players: "+m.players+"/2 — READY "+m.ready+"/2";
+   if(m.type==="ready"){
+
+     document.getElementById("count").innerText=
+       "Players: "+m.players+"/2 | READY: "
+       +m.ready+"/2";
    }
 
    if(m.type==="countdown"){
-     document.getElementById("fight").style.display="block";
-     document.getElementById("fight").innerText=m.value;
+
+     const f=document.getElementById("fight");
+
+     f.style.display="block";
+     f.innerText=m.n;
    }
 
    if(m.type==="start"){
-     lobby.style.display="none";
-     hud.style.display="block";
+
+     document.getElementById("lobby").style.display="none";
+     document.getElementById("hud").style.display="block";
+
+     const f=document.getElementById("fight");
+
+     f.innerText="FIGHT!";
 
      setTimeout(()=>{
-       document.getElementById("fight").innerText="FIGHT!";
-       setTimeout(()=>{
-         document.getElementById("fight").style.display="none";
-       },700);
-     },100);
+       f.style.display="none";
+     },800);
    }
 
    if(m.type==="state"){
-     updateState(m.players);
+     updatePlayers(m.players);
+   }
+
+   if(m.type==="message"){
+     document.getElementById("status").innerText=m.text;
    }
 
    if(m.type==="coins"){
      document.getElementById("coins").innerText=m.coins;
    }
 
-   if(m.type==="message"){
-     status.innerText=m.text;
-   }
-
-   if(m.type==="roomClosed"){
+   if(m.type==="closed"){
      alert("Đối thủ đã rời phòng!");
      location.reload();
    }
@@ -362,54 +465,99 @@ function connect(){
 
 connect();
 
-document.getElementById("create").onclick=()=>{
- const name=document.getElementById("name").value.trim() || "Noob";
+// =============================
+// BUTTONS
+// =============================
 
- ws.send(JSON.stringify({
+document.getElementById("create").onclick=()=>{
+
+ if(!socket || socket.readyState!==1){
+   alert("Server chưa kết nối!");
+   return;
+ }
+
+ const name=
+   document.getElementById("name").value.trim()
+   ||"Noob";
+
+ socket.send(JSON.stringify({
    type:"create",
-   name
+   name:name
  }));
 };
 
 document.getElementById("join").onclick=()=>{
- const name=document.getElementById("name").value.trim() || "Noob";
- const code=document.getElementById("roomInput").value.trim().toUpperCase();
 
- ws.send(JSON.stringify({
+ if(!socket || socket.readyState!==1){
+   alert("Server chưa kết nối!");
+   return;
+ }
+
+ const name=
+   document.getElementById("name").value.trim()
+   ||"Noob";
+
+ const room=
+   document.getElementById("roomCodeInput")
+   .value.trim()
+   .toUpperCase();
+
+ socket.send(JSON.stringify({
    type:"join",
-   name,
-   code
+   name:name,
+   code:room
  }));
 };
 
 document.getElementById("ready").onclick=()=>{
- ws.send(JSON.stringify({
-   type:"ready"
- }));
+
+ if(socket && socket.readyState===1){
+
+   socket.send(JSON.stringify({
+     type:"ready"
+   }));
+
+ }
+
 };
 
 function buy(skin){
- ws.send(JSON.stringify({
-   type:"buy",
-   skin
- }));
+
+ if(socket && socket.readyState===1){
+
+   socket.send(JSON.stringify({
+     type:"buy",
+     skin:skin
+   }));
+
+ }
+
 }
 
-function makeNoob(color){
+// =============================
+// NOOB
+// =============================
+
+function noob(color){
 
  const g=new THREE.Group();
 
- const mat=new THREE.MeshLambertMaterial({
-   color:color
- });
+ const bodyMat=
+   new THREE.MeshLambertMaterial({color});
 
- const skin=new THREE.MeshLambertMaterial({
-   color:0xffcc99
- });
+ const skinMat=
+   new THREE.MeshLambertMaterial({
+     color:0xffcc99
+   });
+
+ const black=
+   new THREE.MeshBasicMaterial({
+     color:0x000000
+   });
 
  const body=new THREE.Mesh(
-   new THREE.BoxGeometry(1,1.3,.65),
-   mat
+   new THREE.BoxGeometry(1,1.3,.7),
+   bodyMat
  );
 
  body.position.y=1.4;
@@ -417,43 +565,44 @@ function makeNoob(color){
 
  const head=new THREE.Mesh(
    new THREE.BoxGeometry(1.05,1.05,1.05),
-   skin
+   skinMat
  );
 
  head.position.y=2.55;
  g.add(head);
 
- const eyeMat=new THREE.MeshBasicMaterial({
-   color:0x000000
- });
-
- const eye1=new THREE.Mesh(
-   new THREE.BoxGeometry(.12,.12,.03),
-   eyeMat
+ const e1=new THREE.Mesh(
+   new THREE.BoxGeometry(.13,.13,.03),
+   black
  );
 
- eye1.position.set(-.2,2.6,.53);
- g.add(eye1);
+ e1.position.set(-.2,2.6,.53);
+ g.add(e1);
 
- const eye2=eye1.clone();
- eye2.position.x=.2;
- g.add(eye2);
+ const e2=e1.clone();
+ e2.position.x=.2;
+ g.add(e2);
 
- const leg1=new THREE.Mesh(
-   new THREE.BoxGeometry(.38,1,.4),
-   new THREE.MeshLambertMaterial({color:0x2255aa})
+ const legMat=
+   new THREE.MeshLambertMaterial({
+     color:0x2255aa
+   });
+
+ const l1=new THREE.Mesh(
+   new THREE.BoxGeometry(.4,1,.4),
+   legMat
  );
 
- leg1.position.set(-.25,.25,0);
- g.add(leg1);
+ l1.position.set(-.25,.25,0);
+ g.add(l1);
 
- const leg2=leg1.clone();
- leg2.position.x=.25;
- g.add(leg2);
+ const l2=l1.clone();
+ l2.position.x=.25;
+ g.add(l2);
 
  const arm1=new THREE.Mesh(
    new THREE.BoxGeometry(.35,1.1,.4),
-   mat
+   bodyMat
  );
 
  arm1.position.set(-.7,1.45,0);
@@ -464,22 +613,32 @@ function makeNoob(color){
  g.add(arm2);
 
  // sword
+
  const sword=new THREE.Mesh(
    new THREE.BoxGeometry(.12,1.7,.12),
-   new THREE.MeshLambertMaterial({color:0xdddddd})
+   new THREE.MeshLambertMaterial({
+     color:0xeeeeee
+   })
  );
 
  sword.rotation.z=-.5;
- sword.position.set(.9,1.3,0);
+ sword.position.set(.9,1.35,0);
+
  g.add(sword);
 
  return g;
 }
 
-function init3D(){
+// =============================
+// 3D
+// =============================
+
+function init(){
 
  scene=new THREE.Scene();
- scene.background=new THREE.Color(0x6fc7ff);
+
+ scene.background=
+   new THREE.Color(0x75cfff);
 
  camera=new THREE.PerspectiveCamera(
    70,
@@ -488,157 +647,217 @@ function init3D(){
    1000
  );
 
- renderer=new THREE.WebGLRenderer({
-   antialias:true
- });
+ renderer=
+   new THREE.WebGLRenderer({
+     antialias:true
+   });
 
- renderer.setSize(innerWidth,innerHeight);
- document.body.appendChild(renderer.domElement);
-
- const light=new THREE.HemisphereLight(
-   0xffffff,
-   0x557755,
-   2
+ renderer.setSize(
+   innerWidth,
+   innerHeight
  );
 
- scene.add(light);
-
- const sun=new THREE.DirectionalLight(
-   0xffffff,
-   2
+ document.body.appendChild(
+   renderer.domElement
  );
+
+ scene.add(
+   new THREE.HemisphereLight(
+     0xffffff,
+     0x446644,
+     2
+   )
+ );
+
+ const sun=
+   new THREE.DirectionalLight(
+     0xffffff,
+     2
+   );
 
  sun.position.set(10,20,10);
+
  scene.add(sun);
 
  // arena
+
  const ground=new THREE.Mesh(
-   new THREE.CylinderGeometry(15,15,.5,64),
-   new THREE.MeshLambertMaterial({color:0x4caf50})
+   new THREE.CylinderGeometry(
+     15,15,.5,64
+   ),
+   new THREE.MeshLambertMaterial({
+     color:0x4caf50
+   })
  );
 
  ground.position.y=-.25;
+
  scene.add(ground);
 
- // center
- const center=new THREE.Mesh(
-   new THREE.CylinderGeometry(4,4,.05,64),
-   new THREE.MeshLambertMaterial({color:0x77dd77})
+ // border
+
+ const border=new THREE.Mesh(
+   new THREE.TorusGeometry(
+     14.5,.35,12,64
+   ),
+   new THREE.MeshLambertMaterial({
+     color:0x236b32
+   })
  );
 
- center.position.y=.02;
- scene.add(center);
+ border.rotation.x=Math.PI/2;
+ border.position.y=.1;
+
+ scene.add(border);
 
  // trees
- for(let i=0;i<12;i++){
 
-   const a=i/12*Math.PI*2;
+ for(let i=0;i<14;i++){
+
+   const a=i/14*Math.PI*2;
+
    const x=Math.cos(a)*13;
    const z=Math.sin(a)*13;
 
    const trunk=new THREE.Mesh(
-     new THREE.CylinderGeometry(.25,.35,2,8),
-     new THREE.MeshLambertMaterial({color:0x704214})
+     new THREE.CylinderGeometry(
+       .25,.35,2,8
+     ),
+     new THREE.MeshLambertMaterial({
+       color:0x704214
+     })
    );
 
    trunk.position.set(x,1,z);
+
    scene.add(trunk);
 
-   const leaf=new THREE.Mesh(
-     new THREE.SphereGeometry(1.3,12,12),
-     new THREE.MeshLambertMaterial({color:0x168a35})
+   const leaves=new THREE.Mesh(
+     new THREE.SphereGeometry(
+       1.3,12,12
+     ),
+     new THREE.MeshLambertMaterial({
+       color:0x168a35
+     })
    );
 
-   leaf.position.set(x,2.5,z);
-   scene.add(leaf);
+   leaves.position.set(x,2.5,z);
+
+   scene.add(leaves);
  }
 
- renderer.domElement.addEventListener("contextmenu",e=>e.preventDefault());
+ // camera
 
- renderer.domElement.addEventListener("mousedown",e=>{
+ renderer.domElement.oncontextmenu=
+   e=>e.preventDefault();
+
+ renderer.domElement.onmousedown=e=>{
 
    if(e.button===2){
+
      dragging=true;
-     lastX=e.clientX;
-     lastY=e.clientY;
+
+     mx=e.clientX;
+     my=e.clientY;
    }
 
    if(e.button===0){
-     if(ws && ws.readyState===1){
-       ws.send(JSON.stringify({type:"attack"}));
+
+     if(socket &&
+        socket.readyState===1){
+
+       socket.send(JSON.stringify({
+         type:"attack"
+       }));
+
      }
+
    }
 
- });
+ };
 
- window.addEventListener("mouseup",()=>{
+ window.onmouseup=()=>{
    dragging=false;
- });
+ };
 
- window.addEventListener("mousemove",e=>{
+ window.onmousemove=e=>{
 
    if(!dragging)return;
 
-   yaw-=
-(e.clientX-lastX)*.008;
-   pitch+=(e.clientY-lastY)*.008;
+   yaw-=(e.clientX-mx)*.008;
 
-   pitch=Math.max(-1,Math.min(1.2,pitch));
+   pitch+=(e.clientY-my)*.008;
 
-   lastX=e.clientX;
-   lastY=e.clientY;
- });
+   pitch=Math.max(
+     -.8,
+     Math.min(1.1,pitch)
+   );
 
- window.addEventListener("keydown",e=>{
+   mx=e.clientX;
+   my=e.clientY;
+ };
+
+ window.onkeydown=e=>{
 
    keys[e.key.toLowerCase()]=true;
 
    if(e.code==="Space"){
+
      e.preventDefault();
 
-     if(ws && ws.readyState===1){
-       ws.send(JSON.stringify({type:"jump"}));
+     if(socket &&
+        socket.readyState===1){
+
+       socket.send(JSON.stringify({
+         type:"jump"
+       }));
+
      }
+
    }
 
- });
+ };
 
- window.addEventListener("keyup",e=>{
+ window.onkeyup=e=>{
    keys[e.key.toLowerCase()]=false;
- });
+ };
+
+ setInterval(move,50);
 
  animate();
-
- setInterval(sendMovement,50);
 }
 
-function sendMovement(){
+function move(){
 
- if(!ws || ws.readyState!==1)return;
+ if(!socket ||
+    socket.readyState!==1)return;
 
- let dx=0;
- let dz=0;
+ let x=0;
+ let z=0;
 
- if(keys["w"])dz-=1;
- if(keys["s"])dz+=1;
- if(keys["a"])dx-=1;
- if(keys["d"])dx+=1;
+ if(keys.w)z-=1;
+ if(keys.s)z+=1;
+ if(keys.a)x-=1;
+ if(keys.d)x+=1;
 
- if(dx!==0 || dz!==0){
+ if(x!==0||z!==0){
 
-   const len=Math.hypot(dx,dz);
-   dx/=len;
-   dz/=len;
+   const len=Math.hypot(x,z);
 
-   ws.send(JSON.stringify({
+   x/=len;
+   z/=len;
+
+   socket.send(JSON.stringify({
      type:"move",
-     dx,
-     dz
+     x:x,
+     z:z
    }));
+
  }
+
 }
 
-function updateState(data){
+function updatePlayers(data){
 
  for(const id in data){
 
@@ -648,11 +867,17 @@ function updateState(data){
 
      let color=0xffcc00;
 
-     if(p.skin==="red")color=0xdd2222;
-     if(p.skin==="ninja")color=0x222222;
-     if(p.skin==="gold")color=0xffaa00;
+     if(p.skin==="red")
+       color=0xdd2222;
 
-     players[id]=makeNoob(color);
+     if(p.skin==="ninja")
+       color=0x222222;
+
+     if(p.skin==="gold")
+       color=0xffaa00;
+
+     players[id]=noob(color);
+
      scene.add(players[id]);
    }
 
@@ -662,47 +887,41 @@ function updateState(data){
      p.z
    );
 
-   players[id].rotation.y=p.r;
-
    if(id===myId){
 
-     document.getElementById("playerName").innerText=p.name;
-     document.getElementById("coins").innerText=p.coins;
+     document.getElementById(
+       "myName"
+     ).innerText=p.name;
 
-     document.getElementById("hpbar").style.width=
-       p.hp+"%";
+     document.getElementById(
+       "coins"
+     ).innerText=p.coins;
+
+     document.getElementById(
+       "hpbar"
+     ).style.width=p.hp+"%";
    }
  }
 
- for(const id in players){
-
-   if(!data[id]){
-
-     scene.remove(players[id]);
-     delete players[id];
-   }
- }
 }
 
 function animate(){
 
  requestAnimationFrame(animate);
 
- if(!camera || !renderer)return;
-
  const me=players[myId];
 
  if(me){
 
-   const distance=7;
+   const dist=7;
 
    const cx=
      me.position.x+
-     Math.sin(yaw)*distance;
+     Math.sin(yaw)*dist;
 
    const cz=
      me.position.z+
-     Math.cos(yaw)*distance;
+     Math.cos(yaw)*dist;
 
    const cy=
      me.position.y+
@@ -710,7 +929,9 @@ function animate(){
      Math.sin(pitch)*4;
 
    camera.position.lerp(
-     new THREE.Vector3(cx,cy,cz),
+     new THREE.Vector3(
+       cx,cy,cz
+     ),
      .15
    );
 
@@ -721,451 +942,393 @@ function animate(){
    );
  }
 
- renderer.render(scene,camera);
+ renderer.render(
+   scene,
+   camera
+ );
+
 }
 
-window.addEventListener("resize",()=>{
- if(!camera)return;
+window.onresize=()=>{
 
- camera.aspect=innerWidth/innerHeight;
+ camera.aspect=
+   innerWidth/innerHeight;
+
  camera.updateProjectionMatrix();
 
- renderer.setSize(innerWidth,innerHeight);
-});
+ renderer.setSize(
+   innerWidth,
+   innerHeight
+ );
 
-init3D();
+};
+
+init();
 
 </script>
 </body>
 </html>
 `;
 
-// ===============================
-// HTTP SERVER
-// ===============================
+// =============================
+// HTTP
+// =============================
 
 const server=http.createServer((req,res)=>{
 
- if(req.url==="/" || req.url==="/index.html"){
-   res.writeHead(200,{
-     "Content-Type":"text/html; charset=utf-8"
-   });
+ res.writeHead(200,{
+   "Content-Type":
+     "text/html; charset=utf-8"
+ });
 
-   res.end(HTML);
-   return;
- }
+ res.end(HTML);
 
- res.writeHead(404);
- res.end("Not Found");
 });
 
-// ===============================
-// WEBSOCKET SERVER
-// ===============================
-
-const wss=new WebSocket.Server({server});
-
-const rooms=new Map();
-
-function randomCode(){
-
- let chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
- let code="";
-
- for(let i=0;i<5;i++){
-   code+=chars[Math.floor(Math.random()*chars.length)];
- }
-
- return code;
-}
-
-function send(ws,data){
-
- if(ws && ws.readyState===WebSocket.OPEN){
-   ws.send(JSON.stringify(data));
- }
-}
-
-function broadcast(room,data){
-
- for(const p of room.players.values()){
-   send(p.ws,data);
- }
-}
-
-function makePlayer(ws,name){
-
- return {
-   id:Math.random().toString(36).slice(2),
-   ws,
-   name:name || "Noob",
-
-   x:0,
-   y:0,
-   z:5,
-   r:0,
-
-   vx:0,
-   vy:0,
-
-   hp:100,
-   coins:0,
-
-   ready:false,
-   room:null,
-
-   skin:"noob",
-
-   owned:{
-     noob:true
-   }
- };
-}
-
-function createRoom(player){
-
- let code;
-
- do{
-   code=randomCode();
- }while(rooms.has(code));
-
- const room={
-   code,
-   players:new Map(),
-   started:false
- };
-
- rooms.set(code,room);
-
- room.players.set(player.id,player);
- player.room=room;
-
- send(player.ws,{
-   type:"room",
-   code,
-   players:1
- });
-}
-
-function joinRoom(player,code){
-
- const room=rooms.get(code);
-
- if(!room){
-   send(player.ws,{
-     type:"message",
-     text:"❌ Không tìm thấy phòng!"
-   });
-
-   return;
- }
-
- if(room.players.size>=2){
-
-   send(player.ws,{
-     type:"message",
-     text:"❌ Phòng đã đầy!"
-   });
-
-   return;
- }
-
- room.players.set(player.id,player);
- player.room=room;
-
- const arr=[...room.players.values()];
-
- arr[0].x=-3;
- arr[0].z=0;
-
- arr[1].x=3;
- arr[1].z=0;
-
- broadcast(room,{
-   type:"room",
-   code:room.code,
-   players:room.players.size
- });
-
- broadcast(room,{
-   type:"readyState",
-   players:room.players.size,
-   ready:arr.filter(p=>p.ready).length
- });
-}
-
-function startGame(room){
-
- if(room.started)return;
-
- if(room.players.size!==2)return;
-
- const arr=[...room.players.values()];
-
- if(!arr.every(p=>p.ready))return;
-
- room.started=true;
-
- let n=3;
-
- const timer=setInterval(()=>{
-
-   broadcast(room,{
-     type:"countdown",
-     value:n
-   });
-
-   n--;
-
-   if(n<0){
-
-     clearInterval(timer);
-
-     broadcast(room,{
-       type:"start"
-     });
-
-   }
-
- },1000);
-}
-
-function broadcastState(room){
-
- const state={};
-
- for(const p of room.players.values()){
-
-   state[p.id]={
-     id:p.id,
-     name:p.name,
-     x:p.x,
-     y:p.y,
-     z:p.z,
-     r:p.r,
-     hp:p.hp,
-     coins:p.coins,
-     skin:p.skin
-   };
- }
-
- broadcast(room,{
-   type:"state",
-   players:state
- });
-}
-
-function attack(player){
-
- const room=player.room;
-
- if(!room || !room.started)return;
-
- let target=null;
-
- for(const p of room.players.values()){
-
-   if(p.id===player.id)continue;
-
-   const dx=p.x-player.x;
-   const dz=p.z-player.z;
-
-   const dist=Math.hypot(dx,dz);
-
-   if(dist<2.8){
-     target=p;
-     break;
-   }
- }
-
- if(!target)return;
-
- target.hp-=25;
-
- if(target.hp<=0){
-
-   player.coins+=25;
-
-   send(player.ws,{
-     type:"coins",
-     coins:player.coins
-   });
-
-   target.hp=100;
-
-   player.x=-3;
-   player.z=0;
-
-   target.x=3;
-   target.z=0;
-
-   broadcast(room,{
-     type:"message",
-     text:"💥 "+player.name+" KO'd "+target.name+"! +25 coins"
-   });
- }
-}
-
-function buySkin(player,skin){
-
- const prices={
-   noob:0,
-   red:50,
-   ninja:100,
-   gold:200
- };
-
- if(!(skin in prices))return;
-
- if(player.owned[skin]){
-
-   player.skin=skin;
-
-   send(player.ws,{
-     type:"message",
-     text:"✅ Đã chọn skin "+skin.toUpperCase()
-   });
-
-   return;
- }
-
- const price=prices[skin];
-
- if(player.coins<price){
-
-   send(player.ws,{
-     type:"message",
-     text:"❌ Không đủ coins!"
-   });
-
-   return;
- }
-
- player.coins-=price;
- player.owned[skin]=true;
- player.skin=skin;
-
- send(player.ws,{
-   type:"coins",
-   coins:player.coins
- });
-
- send(player.ws,{
-   type:"message",
-   text:"🛒 Mua thành công: "+skin.toUpperCase()
- });
-}
+// =============================
+// WEBSOCKET
+// =============================
+
+const wss=new WebSocket.Server({
+ server
+});
 
 wss.on("connection",ws=>{
 
- const temp={
-   id:Math.random().toString(36).slice(2)
- };
+ let me=null;
 
  send(ws,{
    type:"welcome",
-   id:temp.id
+   id:id()
  });
-
- let player=null;
 
  ws.on("message",raw=>{
 
    let m;
 
    try{
-     m=JSON.parse(raw.toString());
+     m=JSON.parse(raw);
    }catch{
      return;
    }
 
+   // CREATE
+
    if(m.type==="create"){
 
-     player=makePlayer(ws,m.name);
-     player.id=temp.id;
+     if(me){
+       send(ws,{
+         type:"message",
+         text:"Bạn đã ở trong phòng!"
+       });
+       return;
+     }
 
-     createRoom(player);
+     me=player(
+       ws,
+       String(m.name||"Noob").slice(0,16)
+     );
+
+     const roomCode=code();
+
+     const room={
+       code:roomCode,
+       players:new Map(),
+       started:false
+     };
+
+     room.players.set(me.id,me);
+     me.room=room;
+
+     rooms.set(roomCode,room);
+
+     send(ws,{
+       type:"welcome",
+       id:me.id
+     });
+
+     send(ws,{
+       type:"room",
+       code:roomCode,
+       players:1
+     });
+
+     return;
    }
+
+   // JOIN
 
    if(m.type==="join"){
 
-     player=makePlayer(ws,m.name);
-     player.id=temp.id;
+     const room=
+       rooms.get(
+         String(m.code||"").toUpperCase()
+       );
 
-     joinRoom(
-       player,
-       String(m.code||"").toUpperCase()
+     if(!room){
+
+       send(ws,{
+         type:"message",
+         text:"❌ Không tìm thấy phòng!"
+       });
+
+       return;
+     }
+
+     if(room.players.size>=2){
+
+       send(ws,{
+         type:"message",
+         text:"❌ Phòng đã đầy!"
+       });
+
+       return;
+     }
+
+     me=player(
+       ws,
+       String(m.name||"Noob").slice(0,16)
      );
+
+     room.players.set(me.id,me);
+
+     me.room=room;
+
+     const arr=[
+       ...room.players.values()
+     ];
+
+     arr[0].x=-3;
+     arr[0].z=0;
+
+     arr[1].x=3;
+     arr[1].z=0;
+
+     broadcast(room,{
+       type:"room",
+       code:room.code,
+       players:2
+     });
+
+     broadcast(room,{
+       type:"ready",
+       players:2,
+       ready:0
+     });
+
+     return;
    }
 
-   if(!player)return;
+   if(!me)return;
+
+   const room=me.room;
 
    if(m.type==="ready"){
 
-     if(!player.room)return;
+     if(!room)return;
 
-     player.ready=!player.ready;
+     me.ready=!me.ready;
 
-     const room=player.room;
+     const list=[
+       ...room.players.values()
+     ];
+
+     const ready=
+       list.filter(p=>p.ready).length;
 
      broadcast(room,{
-       type:"readyState",
-       players:room.players.size,
-       ready:[...room.players.values()]
-         .filter(p=>p.ready).length
+       type:"ready",
+       players:list.length,
+       ready
      });
 
-     startGame(room);
-   }
-
-   if(m.type==="move"){
-
-     if(!player.room || !player.room.started)return;
-
-     let dx=Number(m.dx)||0;
-     let dz=Number(m.dz)||0;
-
-     const speed=.35;
-
-     player.x+=dx*speed;
-     player.z+=dz*speed;
-
-     player.x=Math.max(-13,Math.min(13,player.x));
-     player.z=Math.max(-13,Math.min(13,player.z));
-
-     if(dx!==0 || dz!==0){
-       player.r=Math.atan2(dx,dz);
-     }
-   }
-
-   if(m.type==="jump"){
-
      if(
-       player.room &&
-       player.room.started &&
-       player.y<=.01
+       list.length===2 &&
+       ready===2 &&
+       !room.started
      ){
-       player.vy=.42;
+
+       let n=3;
+
+       const timer=setInterval(()=>{
+
+         broadcast(room,{
+           type:"countdown",
+           n
+         });
+
+         n--;
+
+         if(n<0){
+
+           clearInterval(timer);
+
+           room.started=true;
+
+           broadcast(room,{
+             type:"start"
+           });
+         }
+
+       },1000);
+
+     }
+
+   }
+
+   // MOVE
+
+   if(m.type==="move" &&
+      room &&
+      room.started){
+
+     let x=Number(m.x)||0;
+     let z=Number(m.z)||0;
+
+     const len=Math.hypot(x,z);
+
+     if(len>0){
+
+       x/=len;
+       z/=len;
+
+       me.x+=x*.35;
+       me.z+=z*.35;
+     }
+
+     me.x=Math.max(
+       -13,
+       Math.min(13,me.x)
+     );
+
+     me.z=Math.max(
+       -13,
+       Math.min(13,me.z)
+     );
+   }
+
+   // JUMP
+
+   if(m.type==="jump" &&
+      room &&
+      room.started){
+
+     if(me.y<=0.01){
+
+       me.vy=.42;
      }
    }
 
-   if(m.type==="attack"){
-     attack(player);
+   // ATTACK
+
+   if(m.type==="attack" &&
+      room &&
+      room.started){
+
+     for(const p of room.players.values()){
+
+       if(p.id===me.id)continue;
+
+       const dx=p.x-me.x;
+       const dz=p.z-me.z;
+
+       const distance=
+         Math.hypot(dx,dz);
+
+       if(distance<=2.8){
+
+         p.hp-=25;
+
+         if(p.hp<=0){
+
+           me.coins+=25;
+
+           p.hp=100;
+
+           me.x=-3;
+           me.z=0;
+
+           p.x=3;
+           p.z=0;
+
+           send(me.ws,{
+             type:"coins",
+             coins:me.coins
+           });
+
+           broadcast(room,{
+             type:"message",
+             text:
+               "💥 "+me.name+
+               " KO'd "+p.name+
+               " +25 coins!"
+           });
+
+         }
+
+         break;
+       }
+     }
+
    }
+
+   // SHOP
 
    if(m.type==="buy"){
-     buySkin(player,m.skin);
+
+     const price={
+       noob:0,
+       red:50,
+       ninja:100,
+       gold:200
+     };
+
+     const skin=m.skin;
+
+     if(!(skin in price))return;
+
+     if(skin==="noob"){
+
+       me.skin="noob";
+
+       return;
+     }
+
+     if(me.coins<price[skin]){
+
+       send(me.ws,{
+         type:"message",
+         text:"❌ Không đủ coins!"
+       });
+
+       return;
+     }
+
+     me.coins-=price[skin];
+     me.skin=skin;
+
+     send(me.ws,{
+       type:"coins",
+       coins:me.coins
+     });
+
+     send(me.ws,{
+       type:"message",
+       text:
+         "✅ Đã mua "+skin.toUpperCase()
+     });
+
    }
+
  });
 
  ws.on("close",()=>{
 
-   if(!player || !player.room)return;
+   if(!me || !me.room)return;
 
-   const room=player.room;
+   const room=me.room;
 
-   room.players.delete(player.id);
+   room.players.delete(me.id);
 
    if(room.players.size===0){
 
@@ -1173,23 +1336,23 @@ wss.on("connection",ws=>{
 
    }else{
 
-     const other=[...room.players.values()][0];
-
-     other.room=null;
-     other.ready=false;
+     const other=
+       [...room.players.values()][0];
 
      send(other.ws,{
-       type:"roomClosed"
+       type:"closed"
      });
 
      rooms.delete(room.code);
    }
+
  });
+
 });
 
-// ===============================
-// PHYSICS
-// ===============================
+// =============================
+// PHYSICS + STATE
+// =============================
 
 setInterval(()=>{
 
@@ -1197,27 +1360,56 @@ setInterval(()=>{
 
    for(const p of room.players.values()){
 
-     if(!room.started)continue;
+     if(room.started){
 
-     p.vy-=.025;
-     p.y+=p.vy;
+       p.vy-=.025;
+       p.y+=p.vy;
 
-     if(p.y<0){
-       p.y=0;
-       p.vy=0;
+       if(p.y<0){
+
+         p.y=0;
+         p.vy=0;
+       }
+
      }
+
    }
 
-   broadcastState(room);
+   const state={};
+
+   for(const p of room.players.values()){
+
+     state[p.id]={
+       id:p.id,
+       name:p.name,
+       x:p.x,
+       y:p.y,
+       z:p.z,
+       hp:p.hp,
+       coins:p.coins,
+       skin:p.skin
+     };
+
+   }
+
+   broadcast(room,{
+     type:"state",
+     players:state
+   });
+
  }
 
 },50);
 
+// =============================
+// START
+// =============================
+
 server.listen(PORT,()=>{
  console.log("");
- console.log("=================================");
- console.log("⚔️ NOOB DUEL SERVER");
- console.log("=================================");
- console.log("Game: http://localhost:"+PORT);
- console.log("");
+ console.log("================================");
+ console.log("⚔️ NOOB DUEL");
+ console.log("================================");
+ console.log("🌐 http://localhost:"+PORT);
+ console.log("================================");
 });
