@@ -1,97 +1,1779 @@
-from pathlib import Path
-import zipfile, textwrap
-
-root=Path("/mnt/data/noob_duel_v1")
-root.mkdir(exist_ok=True)
-
-client = r'''<!doctype html>
-<html><head><meta charset="utf-8"><title>Noob Duel</title>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOOB DUEL</title>
 <style>
-html,body{margin:0;overflow:hidden;background:#111;font-family:Arial}
-#ui{position:fixed;z-index:5;left:15px;top:15px;color:white;background:#0009;padding:12px;border-radius:10px}
-#shop{position:fixed;z-index:6;right:15px;top:15px;color:white;background:#000b;padding:12px;border-radius:10px}
-button{margin:4px;padding:7px 10px;border:0;border-radius:7px;cursor:pointer}
-</style></head><body>
-<div id="ui">Connecting...<br>HP: <span id="hp">100</span> | Coins: <span id="coins">0</span><br><span id="status"></span></div>
-<div id="shop"><b>SKINS</b><div id="skins"></div></div>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-<script>
-const scene=new THREE.Scene(); scene.background=new THREE.Color(0x87ceeb);
-const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,500);
-const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
-scene.add(new THREE.HemisphereLight(0xffffff,0x555555,2));
-const sun=new THREE.DirectionalLight(0xffffff,2);sun.position.set(10,20,10);scene.add(sun);
-const floor=new THREE.Mesh(new THREE.BoxGeometry(40,1,30),new THREE.MeshStandardMaterial({color:0x4c9a43}));floor.position.y=-.5;scene.add(floor);
+*{box-sizing:border-box}
+html,body{margin:0;overflow:hidden;font-family:Arial;background:#79c9e8}
+canvas{display:block}
 
-const keys={}; addEventListener('keydown',e=>keys[e.code]=true); addEventListener('keyup',e=>keys[e.code]=false);
-let yaw=0,pitch=.25,drag=false,lx=0,ly=0; addEventListener('contextmenu',e=>e.preventDefault());
-addEventListener('mousedown',e=>{if(e.button==2){drag=true;lx=e.clientX;ly=e.clientY}});
-addEventListener('mouseup',e=>{if(e.button==2)drag=false});
-addEventListener('mousemove',e=>{if(!drag)return;yaw-=(e.clientX-lx)*.008;pitch+=(e.clientY-ly)*.008;pitch=Math.max(-.2,Math.min(1,pitch));lx=e.clientX;ly=e.clientY});
-
-function noob(color=0xffe0bd){
- const g=new THREE.Group();
- const mat=c=>new THREE.MeshStandardMaterial({color:c});
- let head=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),mat(color));head.position.y=2.5;g.add(head);
- let torso=new THREE.Mesh(new THREE.BoxGeometry(1.15,1.3,.65),mat(0x0074bd));torso.position.y=1.45;g.add(torso);
- let a=new THREE.Mesh(new THREE.BoxGeometry(.38,1.25,.38),mat(color));let b=a.clone();a.position.set(-.78,1.5,0);b.position.set(.78,1.5,0);g.add(a,b);
- let l=new THREE.Mesh(new THREE.BoxGeometry(.43,1.25,.43),mat(0x3333cc));let r=l.clone();l.position.set(-.3,.25,0);r.position.set(.3,.25,0);g.add(l,r);
- return g;
+.panel{
+ position:fixed;z-index:10;
+ background:rgba(15,23,35,.94);
+ color:white;border-radius:16px;
+ box-shadow:0 12px 40px #0006
 }
-let me=null,others=new Map(),myId=null,hp=100,coins=0,skin='Noob';
-const wsProto=location.protocol==='https:'?'wss':'ws';
-const server=(new URLSearchParams(location.search).get('server'))||`${wsProto}://${location.hostname||'localhost'}:8080`;
-const ws=new WebSocket(server);
-function send(o){if(ws.readyState===1)ws.send(JSON.stringify(o))}
-ws.onopen=()=>{document.querySelector('#status').textContent='Connected • WASD move • Space jump • Left click attack'};
-ws.onmessage=e=>{
- const m=JSON.parse(e.data);
- if(m.type==='init'){myId=m.id;coins=m.coins||0;renderShop(m.owned||['Noob']); setSkin(skin)}
- if(m.type==='state'){for(const p of m.players){if(p.id===myId){if(!me)me=noob();me.position.set(p.x,p.y,p.z);me.rotation.y=p.r}else updateOther(p)}}
- if(m.type==='coins'){coins=m.coins;document.querySelector('#coins').textContent=coins}
- if(m.type==='hp'){hp=m.hp;document.querySelector('#hp').textContent=hp}
- if(m.type==='hit')document.querySelector('#status').textContent=m.text}
-function updateOther(p){let g=others.get(p.id);if(!g){g=noob(0xffd2b0);scene.add(g);others.set(p.id,g)}g.position.set(p.x,p.y,p.z);g.rotation.y=p.r}
-function setSkin(s){skin=s;send({type:'skin',skin:s});document.querySelector('#status').textContent='Skin: '+s}
-function renderShop(owned){const el=document.querySelector('#skins');el.innerHTML='';[['Noob',0],['Red',50],['Ninja',100],['Golden',200]].forEach(([n,c])=>{let b=document.createElement('button');b.textContent=n+' '+(c?'🪙'+c:'FREE');b.onclick=()=>send({type:'buy',skin:n,cost:c});el.appendChild(b)})}
-addEventListener('keydown',e=>{if(e.code==='Space')send({type:'jump'})});
-addEventListener('mousedown',e=>{if(e.button===0)send({type:'attack'})});
-setInterval(()=>{let x=0,z=0;if(keys.KeyW)z--;if(keys.KeyS)z++;if(keys.KeyA)x--;if(keys.KeyD)x++;let l=Math.hypot(x,z)||1;x/=l;z/=l;send({type:'move',x,z,yaw})},50);
-function animate(){requestAnimationFrame(animate);if(me){camera.position.set(me.position.x+Math.sin(yaw)*8,me.position.y+5+Math.sin(pitch)*3,me.position.z+Math.cos(yaw)*8);camera.lookAt(me.position.x,me.position.y+1,me.position.z)}renderer.render(scene,camera)}animate();
-addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
-</script></body></html>'''
 
-server = r'''const WebSocket=require('ws'), fs=require('fs');
-const wss=new WebSocket.Server({port:8080});
-const players=new Map(); let next=1;
-const skins={Noob:0,Red:50,Ninja:100,Golden:200};
-function send(ws,o){if(ws.readyState===1)ws.send(JSON.stringify(o))}
-function broadcast(o){for(const p of players.values())send(p.ws,o)}
-wss.on('connection',ws=>{
- const id=String(next++); const p={id,ws,x:(players.size?4:-4),y:0,z:0,r:0,hp:100,coins:0,owned:['Noob'],skin:'Noob',vy:0};
- players.set(id,p); send(ws,{type:'init',id,coins:p.coins,owned:p.owned});
- ws.on('message',raw=>{
-  let m;try{m=JSON.parse(raw)}catch{return}
-  if(m.type==='move'){p.x+=m.x*.45;p.z+=m.z*.45;p.r=Math.atan2(m.x,m.z);p.x=Math.max(-18,Math.min(18,p.x));p.z=Math.max(-13,Math.min(13,p.z))}
-  if(m.type==='jump'&&p.y<=.01)p.vy=9;
-  if(m.type==='attack'){
-   for(const q of players.values())if(q!==p&&Math.hypot(q.x-p.x,q.z-p.z)<2.3){q.hp-=25;send(q.ws,{type:'hp',hp:q.hp});send(p.ws,{type:'hit',text:'⚔️ Hit!'});
-    if(q.hp<=0){p.coins+=25;p.hp=100;q.hp=100;q.x=q.id%2?4:-4;q.z=0;send(p.ws,{type:'coins',coins:p.coins});send(q.ws,{type:'hp',hp:100});send(p.ws,{type:'hit',text:'🏆 KO! +25 coins')}}
-   }
-  }
-  if(m.type==='buy'&&skins[m.skin]!=null){let c=skins[m.skin];if(!p.owned.includes(m.skin)&&p.coins>=c){p.coins-=c;p.owned.push(m.skin);send(ws,{type:'coins',coins:p.coins});send(ws,{type:'hit',text:'🛒 Bought '+m.skin)}} if(p.owned.includes(m.skin))p.skin=m.skin}
-  if(m.type==='skin'&&p.owned.includes(m.skin))p.skin=m.skin;
- });
- ws.on('close',()=>players.delete(id));
+#lobby{
+ left:50%;top:50%;
+ transform:translate(-50%,-50%);
+ width:min(430px,92vw);
+ padding:25px;text-align:center
+}
+
+h1{margin:0 0 8px;font-size:36px}
+p{opacity:.8}
+
+input,button{
+ width:100%;
+ padding:11px;
+ margin:5px 0;
+ border:0;border-radius:10px;
+ font-size:15px
+}
+
+button{
+ background:#ffd447;
+ font-weight:bold;
+ cursor:pointer
+}
+
+button.dark{
+ background:#334155;
+ color:white
+}
+
+.room{
+ margin-top:12px;
+ padding:12px;
+ background:#ffffff10;
+ border-radius:12px
+}
+
+#count{
+ font-size:52px;
+ font-weight:900;
+ margin:10px
+}
+
+#hud{
+ display:none;
+ left:15px;
+ top:15px;
+ padding:12px
+}
+
+#shop{
+ display:none;
+ right:15px;
+ top:15px;
+ width:190px;
+ padding:12px
+}
+
+#shop button{
+ font-size:13px
+}
+</style>
+</head>
+
+<body>
+
+<div id="lobby" class="panel">
+
+<h1>⚔️ NOOB DUEL</h1>
+<p>2 PLAYER SWORD BATTLE</p>
+
+<input id="name" maxlength="14" value="Noob"
+placeholder="Tên của bạn">
+
+<button onclick="createRoom()">CREATE ROOM</button>
+
+<input id="roomInput"
+maxlength="8"
+placeholder="MÃ PHÒNG">
+
+<button class="dark" onclick="joinRoom()">JOIN ROOM</button>
+
+<div class="room">
+Mã phòng:
+<b id="roomCode">—</b>
+<br><br>
+
+👥 <span id="playerCount">
+Chưa vào phòng
+</span>
+
+<button
+id="readyBtn"
+class="dark"
+onclick="toggleReady()">
+READY
+</button>
+
+</div>
+
+<div id="count"></div>
+
+<div id="lobbyStatus">
+Đang kết nối server...
+</div>
+
+</div>
+
+
+<div id="hud" class="panel">
+
+👤 <b id="playerName">Noob</b>
+<br>
+
+❤️ HP:
+<b id="hp">100</b>
+
+<br>
+
+🪙 Coins:
+<b id="coins">0</b>
+
+<br><br>
+
+WASD = Move<br>
+SPACE = Jump<br>
+LEFT CLICK = Attack<br>
+RIGHT CLICK = Camera
+
+<br><br>
+
+<span id="fightStatus"></span>
+
+</div>
+
+
+<div id="shop" class="panel">
+
+<b>🛒 SKINS</b>
+
+<button onclick="buySkin('Noob')">
+Noob — FREE
+</button>
+
+<button onclick="buySkin('Red')">
+Red — 🪙50
+</button>
+
+<button onclick="buySkin('Ninja')">
+Ninja — 🪙100
+</button>
+
+<button onclick="buySkin('Gold')">
+Gold — 🪙200
+</button>
+
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+<script>
+
+/* =========================
+   THREE.JS
+========================= */
+
+const scene=new THREE.Scene();
+
+scene.background=
+new THREE.Color(0x79c9e8);
+
+const camera=
+new THREE.PerspectiveCamera(
+70,
+innerWidth/innerHeight,
+.1,
+300
+);
+
+const renderer=
+new THREE.WebGLRenderer({
+antialias:true
 });
-setInterval(()=>{for(const p of players.values()){p.vy-=.45;p.y+=p.vy*.05;if(p.y<0){p.y=0;p.vy=0}}broadcast({type:'state',players:[...players.values()].map(({ws,...q})=>q)})},50);
-console.log('Noob Duel server: ws://localhost:8080');'''
 
-(root/'index.html').write_text(client)
-(root/'server.js').write_text(server)
-(root/'package.json').write_text('{"scripts":{"start":"node server.js"},"dependencies":{"ws":"^8.18.0"}}')
-with zipfile.ZipFile('/mnt/data/noob_duel_v1.zip','w',zipfile.ZIP_DEFLATED) as z:
-    for f in root.iterdir(): z.write(f, f.name)
-print('/mnt/data/noob_duel_v1.zip')
+renderer.setSize(
+innerWidth,
+innerHeight
+);
 
-  
+document.body.appendChild(
+renderer.domElement
+);
+
+
+/* LIGHT */
+
+scene.add(
+new THREE.HemisphereLight(
+0xffffff,
+0x445566,
+2.2
+)
+);
+
+const sun=
+new THREE.DirectionalLight(
+0xffffff,
+2
+);
+
+sun.position.set(
+10,20,10
+);
+
+scene.add(sun);
+
+
+/* ARENA */
+
+const arena=
+new THREE.Mesh(
+new THREE.CylinderGeometry(
+18,18,.7,48
+),
+new THREE.MeshStandardMaterial({
+color:0x4c9a43
+})
+);
+
+arena.position.y=-.35;
+
+scene.add(arena);
+
+
+/* =========================
+   NOOB CHARACTER
+========================= */
+
+function createNoob(){
+
+const g=
+new THREE.Group();
+
+function mat(c){
+return new THREE.MeshStandardMaterial({
+color:c
+});
+}
+
+const skin=
+mat(0xffd2ad);
+
+const head=
+new THREE.Mesh(
+new THREE.BoxGeometry(1,1,1),
+skin
+);
+
+head.position.y=2.5;
+
+g.add(head);
+
+
+const torso=
+new THREE.Mesh(
+new THREE.BoxGeometry(
+1.15,1.3,.7
+),
+mat(0x0874bd)
+);
+
+torso.position.y=1.45;
+
+g.add(torso);
+
+
+for(
+const x of [-.78,.78]
+){
+
+const arm=
+new THREE.Mesh(
+new THREE.BoxGeometry(
+.38,1.25,.38
+),
+skin
+);
+
+arm.position.set(
+x,1.5,0
+);
+
+g.add(arm);
+
+}
+
+
+for(
+const x of [-.3,.3]
+){
+
+const leg=
+new THREE.Mesh(
+new THREE.BoxGeometry(
+.43,1.25,.43
+),
+mat(0x3333cc)
+);
+
+leg.position.set(
+x,.25,0
+);
+
+g.add(leg);
+
+}
+
+return g;
+
+}
+
+
+/* =========================
+   VARIABLES
+========================= */
+
+let myId=null;
+
+let me=null;
+
+const others=
+new Map();
+
+const keys={};
+
+let yaw=0;
+
+let pitch=.25;
+
+let dragging=false;
+
+let lastX=0;
+
+let lastY=0;
+
+let ready=false;
+
+
+/* =========================
+   WEBSOCKET
+========================= */
+
+const protocol=
+location.protocol==="https:"
+? "wss"
+: "ws";
+
+const socket=
+new WebSocket(
+protocol+
+"://"+
+location.hostname+
+":8080"
+);
+
+
+function send(data){
+
+if(
+socket.readyState===
+WebSocket.OPEN
+){
+
+socket.send(
+JSON.stringify(data)
+);
+
+}
+
+}
+
+
+/* CONNECT */
+
+socket.onopen=()=>{
+
+document.getElementById(
+"lobbyStatus"
+).textContent=
+"🟢 Server online";
+
+};
+
+
+/* MESSAGE */
+
+socket.onmessage=(event)=>{
+
+const m=
+JSON.parse(event.data);
+
+
+/* INIT */
+
+if(m.type==="init"){
+
+myId=m.id;
+
+document.getElementById(
+"coins"
+).textContent=
+m.coins;
+
+}
+
+
+/* ROOM */
+
+if(m.type==="room"){
+
+document.getElementById(
+"roomCode"
+).textContent=
+m.code;
+
+document.getElementById(
+"playerCount"
+).textContent=
+m.count+
+"/2 • "+
+(
+m.count===2
+?
+"Đủ người!"
+:
+"Đang chờ đối thủ..."
+);
+
+document.getElementById(
+"lobbyStatus"
+).textContent=
+m.readyText||
+"Phòng đã tạo";
+
+}
+
+
+/* READY */
+
+if(m.type==="readyState"){
+
+document.getElementById(
+"playerCount"
+).textContent=
+m.text;
+
+}
+
+
+/* COUNTDOWN */
+
+if(m.type==="countdown"){
+
+document.getElementById(
+"count"
+).textContent=
+m.n;
+
+}
+
+
+/* START */
+
+if(m.type==="start"){
+
+document.getElementById(
+"count"
+).textContent=
+"FIGHT!";
+
+setTimeout(()=>{
+
+document.getElementById(
+"count"
+).textContent="";
+
+},700);
+
+
+document.getElementById(
+"lobby"
+).style.display="none";
+
+document.getElementById(
+"hud"
+).style.display="block";
+
+document.getElementById(
+"shop"
+).style.display="block";
+
+}
+
+
+/* HP */
+
+if(m.type==="hp"){
+
+document.getElementById(
+"hp"
+).textContent=
+m.hp;
+
+}
+
+
+/* COINS */
+
+if(m.type==="coins"){
+
+document.getElementById(
+"coins"
+).textContent=
+m.coins;
+
+}
+
+
+/* TEXT */
+
+if(m.type==="hit"){
+
+document.getElementById(
+"fightStatus"
+).textContent=
+m.text;
+
+}
+
+
+/* STATE */
+
+if(m.type==="state"){
+
+for(
+const p of m.players
+){
+
+if(p.id===myId){
+
+if(!me){
+
+me=createNoob();
+
+scene.add(me);
+
+}
+
+me.position.set(
+p.x,
+p.y,
+p.z
+);
+
+me.rotation.y=
+p.r;
+
+}else{
+
+let other=
+others.get(p.id);
+
+if(!other){
+
+other=createNoob();
+
+scene.add(other);
+
+others.set(
+p.id,
+other
+);
+
+}
+
+other.position.set(
+p.x,
+p.y,
+p.z
+);
+
+other.rotation.y=
+p.r;
+
+}
+
+}
+
+}
+
+
+/* CLOSED */
+
+if(m.type==="roomClosed"){
+
+document.getElementById(
+"lobby"
+).style.display="block";
+
+document.getElementById(
+"hud"
+).style.display="none";
+
+document.getElementById(
+"shop"
+).style.display="none";
+
+document.getElementById(
+"lobbyStatus"
+).textContent=
+"Đối thủ đã rời phòng";
+
+}
+
+};
+
+
+/* =========================
+   LOBBY
+========================= */
+
+function createRoom(){
+
+send({
+
+type:"create",
+
+name:
+document.getElementById(
+"name"
+).value||"Noob"
+
+});
+
+}
+
+
+function joinRoom(){
+
+send({
+
+type:"join",
+
+code:
+document.getElementById(
+"roomInput"
+).value
+.trim()
+.toUpperCase(),
+
+name:
+document.getElementById(
+"name"
+).value||"Noob"
+
+});
+
+}
+
+
+function toggleReady(){
+
+ready=!ready;
+
+document.getElementById(
+"readyBtn"
+).textContent=
+ready
+?
+"✓ READY"
+:
+"READY";
+
+send({
+
+type:"ready",
+
+value:ready
+
+});
+
+}
+
+
+function buySkin(skin){
+
+send({
+
+type:"buy",
+
+skin:skin
+
+});
+
+}
+
+
+/* =========================
+   CONTROLS
+========================= */
+
+addEventListener(
+"keydown",
+e=>{
+
+keys[e.code]=true;
+
+if(
+e.code==="Space"
+){
+
+send({
+type:"jump"
+});
+
+}
+
+}
+);
+
+addEventListener(
+"keyup",
+e=>{
+
+keys[e.code]=false;
+
+}
+);
+
+
+/* ATTACK */
+
+addEventListener(
+"mousedown",
+e=>{
+
+if(
+e.button===0
+){
+
+send({
+type:"attack"
+});
+
+}
+
+if(
+e.button===2
+){
+
+dragging=true;
+
+lastX=e.clientX;
+
+lastY=e.clientY;
+
+}
+
+}
+);
+
+
+addEventListener(
+"mouseup",
+e=>{
+
+if(
+e.button===2
+){
+
+dragging=false;
+
+}
+
+}
+);
+
+
+addEventListener(
+"contextmenu",
+e=>{
+e.preventDefault();
+}
+);
+
+
+/* CAMERA */
+
+addEventListener(
+"mousemove",
+e=>{
+
+if(!dragging)
+return;
+
+const dx=
+e.clientX-lastX;
+
+const dy=
+e.clientY-lastY;
+
+yaw-=
+dx*.008;
+
+pitch+=
+dy*.008;
+
+pitch=
+Math.max(
+-.2,
+Math.min(
+1,
+pitch
+)
+);
+
+lastX=e.clientX;
+
+lastY=e.clientY;
+
+}
+);
+
+
+/* =========================
+   MOVEMENT
+========================= */
+
+setInterval(()=>{
+
+if(
+document.getElementById(
+"lobby"
+).style.display==="none"
+){
+
+let x=
+(keys.KeyD?1:0)-
+(keys.KeyA?1:0);
+
+let z=
+(keys.KeyS?1:0)-
+(keys.KeyW?1:0);
+
+const len=
+Math.hypot(x,z)||1;
+
+x/=len;
+z/=len;
+
+send({
+
+type:"move",
+
+x:x,
+
+z:z,
+
+r:yaw
+
+});
+
+}
+
+},50);
+
+
+/* =========================
+   CAMERA LOOP
+========================= */
+
+function loop(){
+
+requestAnimationFrame(loop);
+
+if(me){
+
+camera.position.set(
+
+me.position.x+
+Math.sin(yaw)*8,
+
+me.position.y+
+5+
+Math.sin(pitch)*3,
+
+me.position.z+
+Math.cos(yaw)*8
+
+);
+
+camera.lookAt(
+
+me.position.x,
+
+me.position.y+1,
+
+me.position.z
+
+);
+
+}
+
+renderer.render(
+scene,
+camera
+);
+
+}
+
+loop();
+
+
+/* RESIZE */
+
+addEventListener(
+"resize",
+()=>{
+
+camera.aspect=
+innerWidth/
+innerHeight;
+
+camera.updateProjectionMatrix();
+
+renderer.setSize(
+innerWidth,
+innerHeight
+);
+
+}
+);
+
+</script>
+
+</body>
+</html>
+const WebSocket = require("ws");
+
+const wss =
+  new WebSocket.Server({
+    port: 8080
+  });
+
+const players = new Map();
+const rooms = new Map();
+
+let nextId = 1;
+
+const skinCost = {
+  Noob: 0,
+  Red: 50,
+  Ninja: 100,
+  Gold: 200
+};
+
+
+/* =========================
+   HELPERS
+========================= */
+
+function send(ws, data) {
+
+  if (ws.readyState === WebSocket.OPEN) {
+
+    ws.send(
+      JSON.stringify(data)
+    );
+
+  }
+
+}
+
+
+function broadcast(room, data) {
+
+  for (const p of room.players) {
+
+    send(p.ws, data);
+
+  }
+
+}
+
+
+function createRoomCode() {
+
+  let code;
+
+  do {
+
+    code =
+      Math.random()
+        .toString(36)
+        .substring(2, 7)
+        .toUpperCase();
+
+  } while (rooms.has(code));
+
+  return code;
+
+}
+
+
+function updateRoom(room) {
+
+  const readyCount =
+    room.players.filter(
+      p => p.ready
+    ).length;
+
+  let text;
+
+  if (
+    room.players.length < 2
+  ) {
+
+    text =
+      room.players.length+
+      "/2 • Đang chờ đối thủ...";
+
+  } else {
+
+    text =
+      "2/2 • READY "+
+      readyCount+
+      "/2";
+
+  }
+
+  for (
+    const p of room.players
+  ) {
+
+    send(
+      p.ws,
+      {
+        type:"room",
+        code:room.code,
+        count:room.players.length,
+        readyText:text
+      }
+    );
+
+  }
+
+}
+
+
+/* =========================
+   START GAME
+========================= */
+
+function startGame(room) {
+
+  if (room.started)
+    return;
+
+  if (
+    room.players.length !== 2
+  )
+    return;
+
+  if (
+    !room.players.every(
+      p => p.ready
+    )
+  )
+    return;
+
+
+  room.started=true;
+
+  let number=3;
+
+  broadcast(
+    room,
+    {
+      type:"countdown",
+      n:number
+    }
+  );
+
+
+  const timer =
+    setInterval(()=>{
+
+      number--;
+
+      if(number>0){
+
+        broadcast(
+          room,
+          {
+            type:"countdown",
+            n:number
+          }
+        );
+
+      }
+
+      else{
+
+        clearInterval(timer);
+
+        broadcast(
+          room,
+          {
+            type:"start"
+          }
+        );
+
+      }
+
+    },1000);
+
+}
+
+
+/* =========================
+   CONNECTION
+========================= */
+
+wss.on(
+  "connection",
+  ws => {
+
+    const id =
+      "p"+nextId++;
+
+    const player = {
+
+      id:id,
+
+      ws:ws,
+
+      name:"Noob",
+
+      room:null,
+
+      ready:false,
+
+      x:0,
+
+      y:0,
+
+      z:0,
+
+      r:0,
+
+      hp:100,
+
+      vy:0,
+
+      coins:0,
+
+      owned:[
+        "Noob"
+      ],
+
+      skin:"Noob"
+
+    };
+
+
+    players.set(
+      id,
+      player
+    );
+
+
+    send(
+      ws,
+      {
+        type:"init",
+        id:id,
+        coins:0
+      }
+    );
+
+
+    /* =========================
+       MESSAGES
+    ========================= */
+
+    ws.on(
+      "message",
+      raw => {
+
+        let m;
+
+        try {
+
+          m =
+            JSON.parse(
+              raw.toString()
+            );
+
+        }
+
+        catch {
+
+          return;
+
+        }
+
+
+        /* CREATE / JOIN */
+
+        if (
+          m.type==="create" ||
+          m.type==="join"
+        ) {
+
+          if(player.room)
+            return;
+
+
+          let room;
+
+
+          if(
+            m.type==="create"
+          ){
+
+            room={
+
+              code:
+                createRoomCode(),
+
+              players:[],
+
+              started:false
+
+            };
+
+            rooms.set(
+              room.code,
+              room
+            );
+
+          }
+
+          else{
+
+            room =
+              rooms.get(
+                m.code
+              );
+
+          }
+
+
+          if(!room){
+
+            send(
+              ws,
+              {
+                type:"hit",
+                text:
+                  "❌ Không tìm thấy phòng"
+              }
+            );
+
+            return;
+
+          }
+
+
+          if(
+            room.players.length>=2
+          ){
+
+            send(
+              ws,
+              {
+                type:"hit",
+                text:
+                  "❌ Phòng đã đầy"
+              }
+            );
+
+            return;
+
+          }
+
+
+          player.name =
+            m.name ||
+            "Noob";
+
+          player.room =
+            room;
+
+          player.ready=false;
+
+          player.x =
+            room.players.length===0
+            ? -5
+            : 5;
+
+          player.z=0;
+
+          player.hp=100;
+
+
+          room.players.push(
+            player
+          );
+
+
+          updateRoom(room);
+
+        }
+
+
+        if(!player.room)
+          return;
+
+
+        const room =
+          player.room;
+
+
+        /* READY */
+
+        if(
+          m.type==="ready"
+        ){
+
+          if(room.started)
+            return;
+
+          player.ready =
+            !!m.value;
+
+          updateRoom(room);
+
+          startGame(room);
+
+          return;
+
+        }
+
+
+        /* MOVE */
+
+        if(
+          m.type==="move"
+        ){
+
+          if(!room.started)
+            return;
+
+
+          player.x +=
+            m.x * 0.42;
+
+          player.z +=
+            m.z * 0.42;
+
+          player.r =
+            m.r || 0;
+
+
+          player.x =
+            Math.max(
+              -16,
+              Math.min(
+                16,
+                player.x
+              )
+            );
+
+
+          player.z =
+            Math.max(
+              -16,
+              Math.min(
+                16,
+                player.z
+              )
+            );
+
+        }
+
+
+        /* JUMP */
+
+        if(
+          m.type==="jump"
+        ){
+
+          if(
+            room.started &&
+            player.y<=0.01
+          ){
+
+            player.vy=9;
+
+          }
+
+        }
+
+
+        /* ATTACK */
+
+        if(
+          m.type==="attack"
+        ){
+
+          if(!room.started)
+            return;
+
+
+          for(
+            const enemy
+            of room.players
+          ){
+
+            if(enemy===player)
+              continue;
+
+
+            const distance =
+              Math.hypot(
+                enemy.x-player.x,
+                enemy.z-player.z
+              );
+
+
+            if(
+              distance<2.5
+            ){
+
+              enemy.hp -= 25;
+
+
+              send(
+                enemy.ws,
+                {
+                  type:"hp",
+                  hp:enemy.hp
+                }
+              );
+
+
+              send(
+                player.ws,
+                {
+                  type:"hit",
+                  text:"⚔️ HIT!"
+                }
+              );
+
+
+              if(
+                enemy.hp<=0
+              ){
+
+                player.coins += 25;
+
+                enemy.hp=100;
+
+
+                /* RESPAWN */
+
+                enemy.x =
+                  enemy.x<0
+                  ? 5
+                  : -5;
+
+                enemy.z=0;
+
+                player.x =
+                  player.x<0
+                  ? -5
+                  : 5;
+
+                player.z=0;
+
+
+                send(
+                  player.ws,
+                  {
+                    type:"coins",
+                    coins:
+                      player.coins
+                  }
+                );
+
+
+                send(
+                  player.ws,
+                  {
+                    type:"hit",
+                    text:
+                      "🏆 KO! +25 COINS"
+                  }
+                );
+
+
+                send(
+                  enemy.ws,
+                  {
+                    type:"hp",
+                    hp:100
+                  }
+                );
+
+              }
+
+            }
+
+          }
+
+        }
+
+
+        /* BUY SKIN */
+
+        if(
+          m.type==="buy"
+        ){
+
+          const cost =
+            skinCost[
+              m.skin
+            ];
+
+
+          if(
+            cost===undefined
+          )
+            return;
+
+
+          if(
+            player.owned.includes(
+              m.skin
+            )
+          ){
+
+            send(
+              player.ws,
+              {
+                type:"hit",
+                text:
+                  "✓ Bạn đã có skin này"
+              }
+            );
+
+            return;
+
+          }
+
+
+          if(
+            player.coins < cost
+          ){
+
+            send(
+              player.ws,
+              {
+                type:"hit",
+                text:
+                  "❌ Không đủ coins"
+              }
+            );
+
+            return;
+
+          }
+
+
+          player.coins -=
+            cost;
+
+          player.owned.push(
+            m.skin
+          );
+
+          player.skin =
+            m.skin;
+
+
+          send(
+            player.ws,
+            {
+              type:"coins",
+              coins:
+                player.coins
+            }
+          );
+
+
+          send(
+            player.ws,
+            {
+              type:"hit",
+              text:
+                "🛒 Mua "+
+                m.skin+
+                " thành công!"
+            }
+          );
+
+        }
+
+      }
+    );
+
+
+    /* =========================
+       DISCONNECT
+    ========================= */
+
+    ws.on(
+      "close",
+      ()=>{
+
+        if(player.room){
+
+          const room =
+            player.room;
+
+
+          room.players =
+            room.players.filter(
+              p => p!==player
+            );
+
+
+          for(
+            const other
+            of room.players
+          ){
+
+            other.room=null;
+            other.ready=false;
+
+            send(
+              other.ws,
+              {
+                type:"roomClosed"
+              }
+            );
+
+          }
+
+
+          rooms.delete(
+            room.code
+          );
+
+        }
+
+
+        players.delete(
+          player.id
+        );
+
+      }
+    );
+
+  }
+);
+
+
+/* =========================
+   PHYSICS + STATE
+========================= */
+
+setInterval(
+  ()=>{
+
+    for(
+      const room
+      of rooms.values()
+    ){
+
+      for(
+        const p
+        of room.players
+      ){
+
+        p.vy -= 0.45;
+
+        p.y +=
+          p.vy * 0.05;
+
+
+        if(
+          p.y<0
+        ){
+
+          p.y=0;
+
+          p.vy=0;
+
+        }
+
+      }
+
+
+      const state =
+        room.players.map(
+          p => ({
+
+            id:p.id,
+
+            name:p.name,
+
+            x:p.x,
+
+            y:p.y,
+
+            z:p.z,
+
+            r:p.r,
+
+            hp:p.hp,
+
+            skin:p.skin
+
+          })
+        );
+
+
+      broadcast(
+        room,
+        {
+          type:"state",
+          players:state
+        }
+      );
+
+    }
+
+  },
+  50
+);
+
+
+console.log(
+  "⚔️ NOOB DUEL SERVER"
+);
+
+console.log(
+  "WebSocket: ws://localhost:8080"
+);
