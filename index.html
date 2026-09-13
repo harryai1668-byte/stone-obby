@@ -1,1415 +1,1581 @@
-const http = require("http");
-const WebSocket = require("ws");
-
-const PORT = 8080;
-const rooms = new Map();
-
-function id() {
-  return Math.random().toString(36).slice(2, 10);
-}
-
-function code() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s = "";
-  for (let i = 0; i < 5; i++) {
-    s += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return s;
-}
-
-function send(ws, data) {
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(data));
-  }
-}
-
-function broadcast(room, data) {
-  room.players.forEach(p => send(p.ws, data));
-}
-
-function player(ws, name) {
-  return {
-    id: id(),
-    ws,
-    name: name || "Noob",
-    x: 0,
-    y: 0,
-    z: 0,
-    hp: 100,
-    coins: 0,
-    ready: false,
-    skin: "noob",
-    vy: 0,
-    room: null
-  };
-}
-
-// =============================
-// HTML GAME
-// =============================
-
-const HTML = `
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Noob Duel</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Noob Bot Arena</title>
 
 <style>
 *{box-sizing:border-box}
 
 body{
- margin:0;
- overflow:hidden;
- font-family:Arial;
- background:#75cfff;
+    margin:0;
+    overflow:hidden;
+    font-family:Arial,sans-serif;
+    background:#69c9ff;
 }
 
 canvas{
- display:block;
+    display:block;
 }
 
-#lobby{
- position:fixed;
- inset:0;
- display:flex;
- align-items:center;
- justify-content:center;
- background:linear-gradient(#55c7ff,#b9efff);
- z-index:20;
-}
-
-.panel{
- width:370px;
- padding:28px;
- background:white;
- border-radius:20px;
- box-shadow:0 15px 50px #0005;
- text-align:center;
-}
-
-h1{
- margin:0 0 5px;
- font-size:38px;
-}
-
-.sub{
- color:#777;
- margin-bottom:20px;
-}
-
-input{
- width:100%;
- padding:13px;
- margin:5px 0;
- border:2px solid #ddd;
- border-radius:10px;
- font-size:16px;
-}
-
-button{
- width:100%;
- padding:13px;
- margin-top:8px;
- border:0;
- border-radius:10px;
- font-weight:bold;
- font-size:16px;
- cursor:pointer;
- color:white;
- background:#222;
-}
-
-#create{
- background:#20a94b;
-}
-
-#join{
- background:#1688dc;
-}
-
-#ready{
- background:#f0a000;
-}
-
-#room{
- display:none;
- margin-top:15px;
- padding:12px;
- background:#eee;
- border-radius:12px;
-}
-
-#code{
- font-size:30px;
- font-weight:bold;
- letter-spacing:7px;
- margin:5px;
-}
-
-#status{
- margin-top:12px;
- font-weight:bold;
-}
-
-#hud{
- display:none;
- position:fixed;
- inset:0;
- pointer-events:none;
- z-index:10;
+#ui{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:10;
 }
 
 #top{
- position:absolute;
- top:15px;
- left:50%;
- transform:translateX(-50%);
- display:flex;
- gap:10px;
+    position:absolute;
+    top:15px;
+    left:50%;
+    transform:translateX(-50%);
+    display:flex;
+    gap:12px;
 }
 
-.card{
- background:#000b;
- color:white;
- padding:10px 16px;
- border-radius:12px;
- font-weight:bold;
+.box{
+    background:rgba(0,0,0,.72);
+    color:white;
+    padding:10px 16px;
+    border-radius:12px;
+    font-weight:bold;
+    min-width:190px;
 }
 
-#hp{
- width:180px;
- height:16px;
- margin-top:5px;
- background:#555;
- border-radius:10px;
- overflow:hidden;
+.bar{
+    width:180px;
+    height:18px;
+    background:#333;
+    border-radius:10px;
+    overflow:hidden;
+    margin-top:5px;
 }
 
-#hpbar{
- height:100%;
- width:100%;
- background:#24df55;
+.hp{
+    width:100%;
+    height:100%;
+    background:#28df52;
 }
 
-#shop{
- position:absolute;
- right:15px;
- top:15px;
- width:180px;
- pointer-events:auto;
+#botbar{
+    background:#ef3333;
 }
 
-.shopTitle{
- background:#000d;
- color:white;
- padding:10px;
- text-align:center;
- font-weight:bold;
- border-radius:10px 10px 0 0;
+#skills{
+    position:absolute;
+    bottom:20px;
+    left:50%;
+    transform:translateX(-50%);
+    display:flex;
+    gap:8px;
 }
 
-.skin{
- background:white;
- padding:11px;
- margin-top:4px;
- border-radius:8px;
- cursor:pointer;
- font-weight:bold;
+.skill{
+    width:90px;
+    height:70px;
+    border-radius:12px;
+    background:rgba(0,0,0,.78);
+    color:white;
+    text-align:center;
+    padding-top:8px;
+    font-weight:bold;
+    border:2px solid #777;
+}
+
+.skill b{
+    display:block;
+    font-size:23px;
+}
+
+.cool{
+    color:#aaa;
+}
+
+#coins{
+    position:absolute;
+    top:15px;
+    right:15px;
+    background:#000b;
+    color:#ffd83d;
+    padding:12px 18px;
+    border-radius:12px;
+    font-weight:bold;
+}
+
+#message{
+    position:absolute;
+    top:120px;
+    left:50%;
+    transform:translateX(-50%);
+    color:white;
+    font-size:25px;
+    font-weight:bold;
+    text-shadow:3px 3px #000;
 }
 
 #controls{
- position:absolute;
- left:15px;
- bottom:15px;
- padding:12px;
- background:#000a;
- color:white;
- border-radius:10px;
- font-size:13px;
+    position:absolute;
+    bottom:15px;
+    left:15px;
+    color:white;
+    background:#0009;
+    padding:10px;
+    border-radius:10px;
+    font-size:12px;
 }
 
-#fight{
- display:none;
- position:absolute;
- left:50%;
- top:40%;
- transform:translate(-50%,-50%);
- font-size:70px;
- color:white;
- font-weight:900;
- text-shadow:5px 5px #000;
+#start{
+    position:fixed;
+    inset:0;
+    z-index:50;
+    background:linear-gradient(#58c8ff,#baf1ff);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+.panel{
+    width:360px;
+    background:white;
+    padding:30px;
+    border-radius:22px;
+    text-align:center;
+    box-shadow:0 15px 50px #0004;
+}
+
+.panel h1{
+    font-size:38px;
+    margin:0 0 10px;
+}
+
+.panel p{
+    color:#666;
+}
+
+.panel button{
+    width:100%;
+    border:0;
+    background:#222;
+    color:white;
+    padding:15px;
+    border-radius:12px;
+    font-size:18px;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+#win{
+    display:none;
+    position:fixed;
+    inset:0;
+    z-index:40;
+    background:#0008;
+    align-items:center;
+    justify-content:center;
+}
+
+.winbox{
+    background:white;
+    padding:35px;
+    border-radius:20px;
+    text-align:center;
+}
+
+.winbox h1{
+    font-size:45px;
+    margin:0 0 10px;
+}
+
+.winbox button{
+    padding:12px 30px;
+    border:0;
+    border-radius:10px;
+    background:#222;
+    color:white;
+    font-weight:bold;
 }
 </style>
 </head>
 
 <body>
 
-<div id="lobby">
+<div id="start">
+    <div class="panel">
+        <h1>⚔️ NOOB DUEL</h1>
+        <p>Fight the BOT 🤖</p>
+        <p>✨ Có aura + skill effects</p>
+        <button onclick="startGame()">START FIGHT</button>
+    </div>
+</div>
 
- <div class="panel">
+<div id="ui">
 
-   <h1>⚔️ NOOB DUEL</h1>
-   <div class="sub">2 PLAYER ONLINE</div>
+    <div id="top">
 
-   <input id="name" placeholder="Tên của bạn">
+        <div class="box">
+            🟨 NOOB
+            <div class="bar">
+                <div id="myhp" class="hp"></div>
+            </div>
+        </div>
 
-   <button id="create">
-     🎮 CREATE ROOM
-   </button>
+        <div class="box">
+            🤖 BOT
+            <div class="bar">
+                <div id="bothp" class="hp" style="background:#ef3333"></div>
+            </div>
+        </div>
 
-   <input id="roomCodeInput" placeholder="Mã phòng">
+    </div>
 
-   <button id="join">
-     🚪 JOIN ROOM
-   </button>
+    <div id="coins">
+        🪙 <span id="coinText">0</span>
+    </div>
 
-   <div id="room">
+    <div id="message"></div>
 
-     <div>ROOM CODE</div>
+    <div id="skills">
 
-     <div id="code">-----</div>
+        <div class="skill">
+            <b>⚔️</b>
+            HIT
+        </div>
 
-     <div id="count">
-       Players: 1/2
-     </div>
+        <div class="skill" id="qSkill">
+            <b>⚡</b>
+            Q
+            <div class="cool" id="qcd">READY</div>
+        </div>
 
-     <button id="ready">
-       ✅ READY
-     </button>
+        <div class="skill" id="eSkill">
+            <b>💥</b>
+            E
+            <div class="cool" id="ecd">READY</div>
+        </div>
 
-   </div>
+        <div class="skill" id="rSkill">
+            <b>🔥</b>
+            R
+            <div class="cool" id="rcd">READY</div>
+        </div>
 
-   <div id="status">
-     🔄 Connecting...
-   </div>
+    </div>
 
- </div>
+    <div id="controls">
+        WASD = Move<br>
+        SPACE = Jump<br>
+        CLICK = Attack<br>
+        Q = Aura Slash<br>
+        E = Energy Burst<br>
+        R = Ultimate 🔥<br>
+        RMB = Camera
+    </div>
 
 </div>
 
-<div id="hud">
-
- <div id="top">
-
-   <div class="card">
-
-     <div id="myName">NOOB</div>
-
-     <div id="hp">
-       <div id="hpbar"></div>
-     </div>
-
-   </div>
-
-   <div class="card">
-     🪙 <span id="coins">0</span>
-   </div>
-
- </div>
-
- <div id="shop">
-
-   <div class="shopTitle">
-     🛒 SKINS
-   </div>
-
-   <div class="skin" onclick="buy('noob')">
-     🟨 NOOB — FREE
-   </div>
-
-   <div class="skin" onclick="buy('red')">
-     🟥 RED — 50
-   </div>
-
-   <div class="skin" onclick="buy('ninja')">
-     🥷 NINJA — 100
-   </div>
-
-   <div class="skin" onclick="buy('gold')">
-     🟨 GOLD — 200
-   </div>
-
- </div>
-
- <div id="controls">
-   WASD = Move<br>
-   SPACE = Jump<br>
-   LEFT CLICK = Attack<br>
-   RIGHT MOUSE = Camera
- </div>
-
- <div id="fight">
-   FIGHT!
- </div>
-
+<div id="win">
+    <div class="winbox">
+        <h1 id="result">YOU WIN!</h1>
+        <p id="reward">+25 🪙</p>
+        <button onclick="newRound()">NEXT ROUND</button>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
 <script>
 
-let socket;
-let myId=null;
-let players={};
-
 let scene;
 let camera;
 let renderer;
 
+let player;
+let bot;
+
 let keys={};
 
 let yaw=0;
-let pitch=.3;
+let pitch=.35;
 
 let dragging=false;
-let mx=0;
-let my=0;
+let lastX=0;
+let lastY=0;
 
-// =============================
-// CONNECT
-// =============================
+let playerHP=100;
+let botHP=100;
 
-function connect(){
+let coins=0;
 
- socket=new WebSocket(
-   (location.protocol==="https:"?"wss://":"ws://")
-   +location.host
- );
+let qCooldown=0;
+let eCooldown=0;
+let rCooldown=0;
 
- socket.onopen=()=>{
-   document.getElementById("status").innerText=
-     "🟢 Connected!";
- };
+let running=false;
+let botAttackTimer=0;
 
- socket.onerror=()=>{
-   document.getElementById("status").innerText=
-     "🔴 WebSocket Error";
- };
+let effects=[];
 
- socket.onclose=()=>{
-   document.getElementById("status").innerText=
-     "🔴 Disconnected";
- };
+const clock=new THREE.Clock();
 
- socket.onmessage=e=>{
 
-   const m=JSON.parse(e.data);
+// ==================================================
+// START
+// ==================================================
 
-   if(m.type==="welcome"){
-     myId=m.id;
-   }
+function startGame(){
 
-   if(m.type==="room"){
+    document.getElementById("start").style.display="none";
 
-     document.getElementById("room").style.display="block";
+    init();
 
-     document.getElementById("code").innerText=m.code;
+    running=true;
+}
 
-     document.getElementById("count").innerText=
-       "Players: "+m.players+"/2";
 
-     document.getElementById("status").innerText=
-       "🏠 Room created!";
-   }
+// ==================================================
+// MATERIAL
+// ==================================================
 
-   if(m.type==="ready"){
+function mat(color, emissive=0x000000){
 
-     document.getElementById("count").innerText=
-       "Players: "+m.players+"/2 | READY: "
-       +m.ready+"/2";
-   }
-
-   if(m.type==="countdown"){
-
-     const f=document.getElementById("fight");
-
-     f.style.display="block";
-     f.innerText=m.n;
-   }
-
-   if(m.type==="start"){
-
-     document.getElementById("lobby").style.display="none";
-     document.getElementById("hud").style.display="block";
-
-     const f=document.getElementById("fight");
-
-     f.innerText="FIGHT!";
-
-     setTimeout(()=>{
-       f.style.display="none";
-     },800);
-   }
-
-   if(m.type==="state"){
-     updatePlayers(m.players);
-   }
-
-   if(m.type==="message"){
-     document.getElementById("status").innerText=m.text;
-   }
-
-   if(m.type==="coins"){
-     document.getElementById("coins").innerText=m.coins;
-   }
-
-   if(m.type==="closed"){
-     alert("Đối thủ đã rời phòng!");
-     location.reload();
-   }
- };
+    return new THREE.MeshStandardMaterial({
+        color:color,
+        emissive:emissive,
+        emissiveIntensity:1
+    });
 
 }
 
-connect();
 
-// =============================
-// BUTTONS
-// =============================
-
-document.getElementById("create").onclick=()=>{
-
- if(!socket || socket.readyState!==1){
-   alert("Server chưa kết nối!");
-   return;
- }
-
- const name=
-   document.getElementById("name").value.trim()
-   ||"Noob";
-
- socket.send(JSON.stringify({
-   type:"create",
-   name:name
- }));
-};
-
-document.getElementById("join").onclick=()=>{
-
- if(!socket || socket.readyState!==1){
-   alert("Server chưa kết nối!");
-   return;
- }
-
- const name=
-   document.getElementById("name").value.trim()
-   ||"Noob";
-
- const room=
-   document.getElementById("roomCodeInput")
-   .value.trim()
-   .toUpperCase();
-
- socket.send(JSON.stringify({
-   type:"join",
-   name:name,
-   code:room
- }));
-};
-
-document.getElementById("ready").onclick=()=>{
-
- if(socket && socket.readyState===1){
-
-   socket.send(JSON.stringify({
-     type:"ready"
-   }));
-
- }
-
-};
-
-function buy(skin){
-
- if(socket && socket.readyState===1){
-
-   socket.send(JSON.stringify({
-     type:"buy",
-     skin:skin
-   }));
-
- }
-
-}
-
-// =============================
+// ==================================================
 // NOOB
-// =============================
+// ==================================================
 
-function noob(color){
+function createNoob(color){
 
- const g=new THREE.Group();
+    const g=new THREE.Group();
 
- const bodyMat=
-   new THREE.MeshLambertMaterial({color});
+    const body=new THREE.Mesh(
+        new THREE.BoxGeometry(1,1.25,.7),
+        mat(color)
+    );
 
- const skinMat=
-   new THREE.MeshLambertMaterial({
-     color:0xffcc99
-   });
+    body.position.y=1.35;
+    g.add(body);
 
- const black=
-   new THREE.MeshBasicMaterial({
-     color:0x000000
-   });
 
- const body=new THREE.Mesh(
-   new THREE.BoxGeometry(1,1.3,.7),
-   bodyMat
- );
+    const head=new THREE.Mesh(
+        new THREE.BoxGeometry(1.05,1.05,1.05),
+        mat(0xffcc99)
+    );
 
- body.position.y=1.4;
- g.add(body);
+    head.position.y=2.5;
+    g.add(head);
 
- const head=new THREE.Mesh(
-   new THREE.BoxGeometry(1.05,1.05,1.05),
-   skinMat
- );
 
- head.position.y=2.55;
- g.add(head);
+    const eyeMat=mat(0x000000);
 
- const e1=new THREE.Mesh(
-   new THREE.BoxGeometry(.13,.13,.03),
-   black
- );
+    const eye1=new THREE.Mesh(
+        new THREE.BoxGeometry(.13,.13,.04),
+        eyeMat
+    );
 
- e1.position.set(-.2,2.6,.53);
- g.add(e1);
+    eye1.position.set(-.2,2.55,.53);
+    g.add(eye1);
 
- const e2=e1.clone();
- e2.position.x=.2;
- g.add(e2);
 
- const legMat=
-   new THREE.MeshLambertMaterial({
-     color:0x2255aa
-   });
+    const eye2=eye1.clone();
+    eye2.position.x=.2;
+    g.add(eye2);
 
- const l1=new THREE.Mesh(
-   new THREE.BoxGeometry(.4,1,.4),
-   legMat
- );
 
- l1.position.set(-.25,.25,0);
- g.add(l1);
+    const legMat=mat(0x2255aa);
 
- const l2=l1.clone();
- l2.position.x=.25;
- g.add(l2);
+    const leg1=new THREE.Mesh(
+        new THREE.BoxGeometry(.4,1,.4),
+        legMat
+    );
 
- const arm1=new THREE.Mesh(
-   new THREE.BoxGeometry(.35,1.1,.4),
-   bodyMat
- );
+    leg1.position.set(-.25,.25,0);
+    g.add(leg1);
 
- arm1.position.set(-.7,1.45,0);
- g.add(arm1);
 
- const arm2=arm1.clone();
- arm2.position.x=.7;
- g.add(arm2);
+    const leg2=leg1.clone();
+    leg2.position.x=.25;
+    g.add(leg2);
 
- // sword
 
- const sword=new THREE.Mesh(
-   new THREE.BoxGeometry(.12,1.7,.12),
-   new THREE.MeshLambertMaterial({
-     color:0xeeeeee
-   })
- );
+    const armMat=mat(color);
 
- sword.rotation.z=-.5;
- sword.position.set(.9,1.35,0);
+    const arm1=new THREE.Mesh(
+        new THREE.BoxGeometry(.35,1.1,.4),
+        armMat
+    );
 
- g.add(sword);
+    arm1.position.set(-.7,1.4,0);
+    g.add(arm1);
 
- return g;
+
+    const arm2=arm1.clone();
+    arm2.position.x=.7;
+    g.add(arm2);
+
+
+    // SWORD
+
+    const sword=new THREE.Mesh(
+        new THREE.BoxGeometry(.13,1.7,.13),
+        mat(0xeef5ff,0x555555)
+    );
+
+    sword.position.set(.9,1.35,0);
+    sword.rotation.z=-.5;
+
+    g.add(sword);
+
+
+    return g;
 }
 
-// =============================
-// 3D
-// =============================
+
+// ==================================================
+// ARENA
+// ==================================================
 
 function init(){
 
- scene=new THREE.Scene();
-
- scene.background=
-   new THREE.Color(0x75cfff);
-
- camera=new THREE.PerspectiveCamera(
-   70,
-   innerWidth/innerHeight,
-   .1,
-   1000
- );
+    scene=new THREE.Scene();
 
- renderer=
-   new THREE.WebGLRenderer({
-     antialias:true
-   });
+    scene.background=
+        new THREE.Color(0x69c9ff);
 
- renderer.setSize(
-   innerWidth,
-   innerHeight
- );
 
- document.body.appendChild(
-   renderer.domElement
- );
+    camera=new THREE.PerspectiveCamera(
+        70,
+        innerWidth/innerHeight,
+        .1,
+        1000
+    );
 
- scene.add(
-   new THREE.HemisphereLight(
-     0xffffff,
-     0x446644,
-     2
-   )
- );
 
- const sun=
-   new THREE.DirectionalLight(
-     0xffffff,
-     2
-   );
+    renderer=new THREE.WebGLRenderer({
+        antialias:true
+    });
 
- sun.position.set(10,20,10);
+    renderer.setSize(
+        innerWidth,
+        innerHeight
+    );
 
- scene.add(sun);
+    document.body.appendChild(renderer.domElement);
 
- // arena
 
- const ground=new THREE.Mesh(
-   new THREE.CylinderGeometry(
-     15,15,.5,64
-   ),
-   new THREE.MeshLambertMaterial({
-     color:0x4caf50
-   })
- );
+    // LIGHT
 
- ground.position.y=-.25;
+    scene.add(
+        new THREE.HemisphereLight(
+            0xffffff,
+            0x446644,
+            2
+        )
+    );
 
- scene.add(ground);
 
- // border
+    const sun=
+        new THREE.DirectionalLight(
+            0xffffff,
+            2
+        );
 
- const border=new THREE.Mesh(
-   new THREE.TorusGeometry(
-     14.5,.35,12,64
-   ),
-   new THREE.MeshLambertMaterial({
-     color:0x236b32
-   })
- );
+    sun.position.set(10,20,10);
 
- border.rotation.x=Math.PI/2;
- border.position.y=.1;
+    scene.add(sun);
 
- scene.add(border);
 
- // trees
+    // GROUND
 
- for(let i=0;i<14;i++){
+    const ground=new THREE.Mesh(
+        new THREE.CylinderGeometry(
+            15,15,.5,64
+        ),
+        mat(0x42b94f)
+    );
 
-   const a=i/14*Math.PI*2;
+    ground.position.y=-.25;
 
-   const x=Math.cos(a)*13;
-   const z=Math.sin(a)*13;
+    scene.add(ground);
 
-   const trunk=new THREE.Mesh(
-     new THREE.CylinderGeometry(
-       .25,.35,2,8
-     ),
-     new THREE.MeshLambertMaterial({
-       color:0x704214
-     })
-   );
 
-   trunk.position.set(x,1,z);
+    // CENTER
 
-   scene.add(trunk);
+    const center=new THREE.Mesh(
+        new THREE.CylinderGeometry(
+            5,5,.05,64
+        ),
+        mat(0x77dd77)
+    );
 
-   const leaves=new THREE.Mesh(
-     new THREE.SphereGeometry(
-       1.3,12,12
-     ),
-     new THREE.MeshLambertMaterial({
-       color:0x168a35
-     })
-   );
+    center.position.y=.03;
 
-   leaves.position.set(x,2.5,z);
+    scene.add(center);
 
-   scene.add(leaves);
- }
 
- // camera
+    // RING
 
- renderer.domElement.oncontextmenu=
-   e=>e.preventDefault();
+    const ring=new THREE.Mesh(
+        new THREE.TorusGeometry(
+            14.5,.3,12,64
+        ),
+        mat(0x1f662d)
+    );
 
- renderer.domElement.onmousedown=e=>{
+    ring.rotation.x=Math.PI/2;
+    ring.position.y=.15;
 
-   if(e.button===2){
+    scene.add(ring);
 
-     dragging=true;
 
-     mx=e.clientX;
-     my=e.clientY;
-   }
+    // TREES
 
-   if(e.button===0){
+    for(let i=0;i<16;i++){
 
-     if(socket &&
-        socket.readyState===1){
+        const a=i/16*Math.PI*2;
 
-       socket.send(JSON.stringify({
-         type:"attack"
-       }));
+        const x=Math.cos(a)*13;
+        const z=Math.sin(a)*13;
 
-     }
 
-   }
+        const trunk=new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                .25,.35,2,8
+            ),
+            mat(0x704214)
+        );
 
- };
+        trunk.position.set(x,1,z);
 
- window.onmouseup=()=>{
-   dragging=false;
- };
+        scene.add(trunk);
 
- window.onmousemove=e=>{
 
-   if(!dragging)return;
+        const leaves=new THREE.Mesh(
+            new THREE.SphereGeometry(
+                1.3,12,12
+            ),
+            mat(0x168a35)
+        );
 
-   yaw-=(e.clientX-mx)*.008;
+        leaves.position.set(x,2.5,z);
 
-   pitch+=(e.clientY-my)*.008;
+        scene.add(leaves);
+    }
 
-   pitch=Math.max(
-     -.8,
-     Math.min(1.1,pitch)
-   );
 
-   mx=e.clientX;
-   my=e.clientY;
- };
+    player=createNoob(0xffcc00);
+    bot=createNoob(0xdd2222);
 
- window.onkeydown=e=>{
+    player.position.set(-3,0,0);
+    bot.position.set(3,0,0);
 
-   keys[e.key.toLowerCase()]=true;
+    scene.add(player);
+    scene.add(bot);
 
-   if(e.code==="Space"){
 
-     e.preventDefault();
+    // CAMERA
 
-     if(socket &&
-        socket.readyState===1){
+    renderer.domElement.oncontextmenu=
+        e=>e.preventDefault();
 
-       socket.send(JSON.stringify({
-         type:"jump"
-       }));
 
-     }
+    renderer.domElement.onmousedown=e=>{
 
-   }
+        if(e.button===2){
 
- };
+            dragging=true;
 
- window.onkeyup=e=>{
-   keys[e.key.toLowerCase()]=false;
- };
+            lastX=e.clientX;
+            lastY=e.clientY;
+        }
 
- setInterval(move,50);
+        if(e.button===0){
 
- animate();
-}
+            normalAttack();
+        }
 
-function move(){
+    };
 
- if(!socket ||
-    socket.readyState!==1)return;
 
- let x=0;
- let z=0;
+    window.onmouseup=()=>{
+        dragging=false;
+    };
 
- if(keys.w)z-=1;
- if(keys.s)z+=1;
- if(keys.a)x-=1;
- if(keys.d)x+=1;
 
- if(x!==0||z!==0){
+    window.onmousemove=e=>{
 
-   const len=Math.hypot(x,z);
+        if(!dragging)return;
 
-   x/=len;
-   z/=len;
+        yaw-=
+            (e.clientX-lastX)*.008;
 
-   socket.send(JSON.stringify({
-     type:"move",
-     x:x,
-     z:z
-   }));
+        pitch+=
+            (e.clientY-lastY)*.008;
 
- }
+        pitch=Math.max(
+            -.8,
+            Math.min(1.1,pitch)
+        );
+
+        lastX=e.clientX;
+        lastY=e.clientY;
+    };
+
+
+    window.onkeydown=e=>{
+
+        keys[e.key.toLowerCase()]=true;
+
+        if(e.code==="Space"){
+            e.preventDefault();
+            jump();
+        }
+
+        if(e.key.toLowerCase()==="q"){
+            auraSlash();
+        }
+
+        if(e.key.toLowerCase()==="e"){
+            energyBurst();
+        }
+
+        if(e.key.toLowerCase()==="r"){
+            ultimate();
+        }
+
+    };
+
+
+    window.onkeyup=e=>{
+        keys[e.key.toLowerCase()]=false;
+    };
+
+
+    animate();
 
 }
 
-function updatePlayers(data){
 
- for(const id in data){
+// ==================================================
+// MOVEMENT
+// ==================================================
 
-   const p=data[id];
+function movement(dt){
 
-   if(!players[id]){
+    let x=0;
+    let z=0;
 
-     let color=0xffcc00;
+    if(keys.w)z-=1;
+    if(keys.s)z+=1;
+    if(keys.a)x-=1;
+    if(keys.d)x+=1;
 
-     if(p.skin==="red")
-       color=0xdd2222;
+    if(x!==0||z!==0){
 
-     if(p.skin==="ninja")
-       color=0x222222;
+        const len=Math.hypot(x,z);
 
-     if(p.skin==="gold")
-       color=0xffaa00;
+        x/=len;
+        z/=len;
 
-     players[id]=noob(color);
+        player.position.x+=x*6*dt;
+        player.position.z+=z*6*dt;
 
-     scene.add(players[id]);
-   }
+        player.position.x=
+            Math.max(-13,
+            Math.min(13,player.position.x));
 
-   players[id].position.set(
-     p.x,
-     p.y,
-     p.z
-   );
-
-   if(id===myId){
-
-     document.getElementById(
-       "myName"
-     ).innerText=p.name;
-
-     document.getElementById(
-       "coins"
-     ).innerText=p.coins;
-
-     document.getElementById(
-       "hpbar"
-     ).style.width=p.hp+"%";
-   }
- }
+        player.position.z=
+            Math.max(-13,
+            Math.min(13,player.position.z));
+    }
 
 }
+
+
+// ==================================================
+// JUMP
+// ==================================================
+
+let playerVelocityY=0;
+
+function jump(){
+
+    if(player.position.y<=.01){
+
+        playerVelocityY=.5;
+    }
+
+}
+
+
+// ==================================================
+// BOT AI
+// ==================================================
+
+function botAI(dt){
+
+    if(!running)return;
+
+    const dx=
+        player.position.x-
+        bot.position.x;
+
+    const dz=
+        player.position.z-
+        bot.position.z;
+
+    const distance=Math.hypot(dx,dz);
+
+    if(distance>2.2){
+
+        const len=Math.max(distance,.001);
+
+        bot.position.x+=
+            dx/len*2.1*dt;
+
+        bot.position.z+=
+            dz/len*2.1*dt;
+
+    }else{
+
+        botAttackTimer-=dt;
+
+        if(botAttackTimer<=0){
+
+            botAttackTimer=.9;
+
+            playerHP-=10;
+
+            document.getElementById("myhp").style.width=
+                Math.max(0,playerHP)+"%";
+
+            hitEffect(
+                player.position,
+                0xff3333,
+                1
+            );
+
+            if(playerHP<=0){
+
+                lose();
+            }
+
+        }
+
+    }
+
+}
+
+
+// ==================================================
+// NORMAL ATTACK
+// ==================================================
+
+function normalAttack(){
+
+    if(!running)return;
+
+    const d=
+        player.position.distanceTo(
+            bot.position
+        );
+
+    if(d<=3){
+
+        botHP-=12;
+
+        damageText(
+            bot.position,
+            "-12"
+        );
+
+        slashEffect(
+            player.position,
+            0xffffff
+        );
+
+        updateHP();
+
+        if(botHP<=0){
+            win();
+        }
+
+    }else{
+
+        slashEffect(
+            player.position,
+            0xffffff
+        );
+
+    }
+
+}
+
+
+// ==================================================
+// Q — AURA SLASH
+// ==================================================
+
+function auraSlash(){
+
+    if(!running||qCooldown>0)return;
+
+    qCooldown=4;
+
+    cooldownDisplay(
+        "qcd",
+        4
+    );
+
+
+    aura(
+        player.position,
+        0x00ffff,
+        1.7
+    );
+
+
+    shockwave(
+        player.position,
+        0x00ffff
+    );
+
+
+    const d=
+        player.position.distanceTo(
+            bot.position
+        );
+
+    if(d<=4){
+
+        botHP-=25;
+
+        damageText(
+            bot.position,
+            "-25 ⚡"
+        );
+
+        updateHP();
+
+        if(botHP<=0){
+            win();
+        }
+
+    }
+
+}
+
+
+// ==================================================
+// E — ENERGY BURST
+// ==================================================
+
+function energyBurst(){
+
+    if(!running||eCooldown>0)return;
+
+    eCooldown=7;
+
+    cooldownDisplay(
+        "ecd",
+        7
+    );
+
+
+    aura(
+        player.position,
+        0x9b00ff,
+        2.3
+    );
+
+
+    for(let i=0;i<20;i++){
+
+        const p=
+            player.position.clone();
+
+        p.y+=1;
+
+        const dir=
+            new THREE.Vector3(
+                Math.random()-.5,
+                Math.random()-.2,
+                Math.random()-.5
+            ).normalize();
+
+        particle(
+            p,
+            0xaa44ff,
+            dir
+        );
+
+    }
+
+
+    const d=
+        player.position.distanceTo(
+            bot.position
+        );
+
+    if(d<=5){
+
+        botHP-=35;
+
+        damageText(
+            bot.position,
+            "-35 💥"
+        );
+
+        updateHP();
+
+        if(botHP<=0){
+            win();
+        }
+
+    }
+
+}
+
+
+// ==================================================
+// R — ULTIMATE
+// ==================================================
+
+function ultimate(){
+
+    if(!running||rCooldown>0)return;
+
+    rCooldown=15;
+
+    cooldownDisplay(
+        "rcd",
+        15
+    );
+
+
+    // HUGE AURA
+
+    aura(
+        player.position,
+        0xff4400,
+        3.8
+    );
+
+
+    aura(
+        player.position,
+        0xffaa00,
+        2.8
+    );
+
+
+    shockwave(
+        player.position,
+        0xff4400,
+        4
+    );
+
+
+    for(let i=0;i<45;i++){
+
+        const p=
+            player.position.clone();
+
+        p.y+=Math.random()*3;
+
+        const dir=
+            new THREE.Vector3(
+                Math.random()-.5,
+                Math.random(),
+                Math.random()-.5
+            ).normalize();
+
+        particle(
+            p,
+            Math.random()>.5?
+                0xff4400:
+                0xffdd00,
+            dir
+        );
+
+    }
+
+
+    const d=
+        player.position.distanceTo(
+            bot.position
+        );
+
+    if(d<=6){
+
+        botHP-=60;
+
+        damageText(
+            bot.position,
+            "-60 🔥"
+        );
+
+        updateHP();
+
+        if(botHP<=0){
+            win();
+        }
+
+    }
+
+}
+
+
+// ==================================================
+// AURA
+// ==================================================
+
+function aura(pos,color,size){
+
+    const ring=new THREE.Mesh(
+
+        new THREE.TorusGeometry(
+            size,
+            .08,
+            12,
+            64
+        ),
+
+        new THREE.MeshBasicMaterial({
+            color:color,
+            transparent:true,
+            opacity:1
+        })
+
+    );
+
+    ring.position.copy(pos);
+    ring.position.y=.15;
+
+    ring.rotation.x=Math.PI/2;
+
+    scene.add(ring);
+
+    effects.push({
+        obj:ring,
+        life:1,
+        type:"ring"
+    });
+
+
+    // vertical aura
+
+    const ring2=ring.clone();
+
+    ring2.rotation.x=0;
+
+    ring2.position.y=1.5;
+
+    scene.add(ring2);
+
+    effects.push({
+        obj:ring2,
+        life:1,
+        type:"ring2"
+    });
+
+}
+
+
+// ==================================================
+// SHOCKWAVE
+// ==================================================
+
+function shockwave(pos,color,max=3){
+
+    const geo=
+        new THREE.RingGeometry(
+            .2,.5,64
+        );
+
+    const mesh=
+        new THREE.Mesh(
+            geo,
+            new THREE.MeshBasicMaterial({
+                color:color,
+                transparent:true,
+                opacity:1,
+                side:THREE.DoubleSide
+            })
+        );
+
+    mesh.rotation.x=-Math.PI/2;
+
+    mesh.position.copy(pos);
+    mesh.position.y=.1;
+
+    scene.add(mesh);
+
+    effects.push({
+        obj:mesh,
+        life:1,
+        shock:true,
+        max
+    });
+
+}
+
+
+// ==================================================
+// SLASH EFFECT
+// ==================================================
+
+function slashEffect(pos,color){
+
+    const ring=new THREE.Mesh(
+        new THREE.TorusGeometry(
+            1.2,.12,10,32,
+            Math.PI
+        ),
+        new THREE.MeshBasicMaterial({
+            color:color,
+            transparent:true
+        })
+    );
+
+    ring.position.copy(pos);
+    ring.position.y=1.5;
+
+    ring.rotation.y=
+        Math.random()*Math.PI;
+
+    scene.add(ring);
+
+    effects.push({
+        obj:ring,
+        life:.35,
+        slash:true
+    });
+
+}
+
+
+// ==================================================
+// HIT EFFECT
+// ==================================================
+
+function hitEffect(pos,color,size){
+
+    aura(
+        pos,
+        color,
+        size
+    );
+
+}
+
+
+// ==================================================
+// PARTICLE
+// ==================================================
+
+function particle(pos,color,dir){
+
+    const mesh=new THREE.Mesh(
+        new THREE.SphereGeometry(
+            .08,
+            6,
+            6
+        ),
+        new THREE.MeshBasicMaterial({
+            color:color
+        })
+    );
+
+    mesh.position.copy(pos);
+
+    scene.add(mesh);
+
+    effects.push({
+        obj:mesh,
+        life:1,
+        particle:true,
+        dir:dir
+    });
+
+}
+
+
+// ==================================================
+// DAMAGE TEXT
+// ==================================================
+
+function damageText(pos,text){
+
+    const div=
+        document.createElement("div");
+
+    div.style.position="fixed";
+    div.style.color="white";
+    div.style.fontSize="28px";
+    div.style.fontWeight="bold";
+    div.style.textShadow="3px 3px #000";
+    div.innerText=text;
+
+    document.body.appendChild(div);
+
+    let life=1;
+
+    function anim(){
+
+        life-=.025;
+
+        const v=
+            pos.clone();
+
+        v.y+=2+(1-life)*2;
+
+        v.project(camera);
+
+        div.style.left=
+            ((v.x+1)/2*innerWidth)+"px";
+
+        div.style.top=
+            ((-v.y+1)/2*innerHeight)+"px";
+
+        div.style.opacity=life;
+
+        if(life>0){
+            requestAnimationFrame(anim);
+        }else{
+            div.remove();
+        }
+
+    }
+
+    anim();
+
+}
+
+
+// ==================================================
+// COOLDOWN
+// ==================================================
+
+function cooldownDisplay(id,time){
+
+    const el=
+        document.getElementById(id);
+
+    let t=time;
+
+    el.innerText=t.toFixed(1);
+
+    const timer=setInterval(()=>{
+
+        t-=.1;
+
+        if(t<=0){
+
+            clearInterval(timer);
+
+            el.innerText="READY";
+
+        }else{
+
+            el.innerText=t.toFixed(1);
+
+        }
+
+    },100);
+
+}
+
+
+// ==================================================
+// HP
+// ==================================================
+
+function updateHP(){
+
+    document.getElementById("bothp")
+        .style.width=
+        Math.max(0,botHP)+"%";
+
+}
+
+
+// ==================================================
+// WIN
+// ==================================================
+
+function win(){
+
+    if(!running)return;
+
+    running=false;
+
+    coins+=25;
+
+    document.getElementById(
+        "coinText"
+    ).innerText=coins;
+
+    document.getElementById(
+        "result"
+    ).innerText="🏆 YOU WIN!";
+
+    document.getElementById(
+        "reward"
+    ).innerText="+25 🪙";
+
+    document.getElementById(
+        "win"
+    ).style.display="flex";
+
+}
+
+
+// ==================================================
+// LOSE
+// ==================================================
+
+function lose(){
+
+    if(!running)return;
+
+    running=false;
+
+    document.getElementById(
+        "result"
+    ).innerText="💀 YOU LOST!";
+
+    document.getElementById(
+        "reward"
+    ).innerText="Try again!";
+
+    document.getElementById(
+        "win"
+    ).style.display="flex";
+
+}
+
+
+// ==================================================
+// NEW ROUND
+// ==================================================
+
+function newRound(){
+
+    document.getElementById(
+        "win"
+    ).style.display="none";
+
+    playerHP=100;
+    botHP=100;
+
+    qCooldown=0;
+    eCooldown=0;
+    rCooldown=0;
+
+    player.position.set(-3,0,0);
+    bot.position.set(3,0,0);
+
+    document.getElementById("myhp")
+        .style.width="100%";
+
+    document.getElementById("bothp")
+        .style.width="100%";
+
+    document.getElementById("qcd")
+        .innerText="READY";
+
+    document.getElementById("ecd")
+        .innerText="READY";
+
+    document.getElementById("rcd")
+        .innerText="READY";
+
+    running=true;
+}
+
+
+// ==================================================
+// EFFECT UPDATE
+// ==================================================
+
+function updateEffects(dt){
+
+    for(let i=effects.length-1;i>=0;i--){
+
+        const e=effects[i];
+
+        e.life-=dt*2;
+
+        if(e.particle){
+
+            e.obj.position.add(
+                e.dir.clone().multiplyScalar(dt*5)
+            );
+
+        }
+
+        if(e.shock){
+
+            const scale=
+                1+(1-e.life)*e.max;
+
+            e.obj.scale.set(
+                scale,
+                scale,
+                scale
+            );
+
+            e.obj.material.opacity=
+                Math.max(0,e.life);
+
+        }
+
+        if(e.ring){
+
+            e.obj.rotation.z+=dt*5;
+
+            e.obj.scale.multiplyScalar(
+                1+dt*2
+            );
+
+            e.obj.material.opacity=
+                Math.max(0,e.life);
+
+        }
+
+        if(e.slash){
+
+            e.obj.rotation.z+=dt*10;
+
+            e.obj.material.opacity=
+                Math.max(0,e.life);
+        }
+
+        if(e.life<=0){
+
+            scene.remove(e.obj);
+
+            effects.splice(i,1);
+        }
+
+    }
+
+}
+
+
+// ==================================================
+// GAME LOOP
+// ==================================================
 
 function animate(){
 
- requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 
- const me=players[myId];
+    const dt=Math.min(
+        clock.getDelta(),
+        .05
+    );
 
- if(me){
 
-   const dist=7;
+    if(running){
 
-   const cx=
-     me.position.x+
-     Math.sin(yaw)*dist;
+        movement(dt);
 
-   const cz=
-     me.position.z+
-     Math.cos(yaw)*dist;
 
-   const cy=
-     me.position.y+
-     3+
-     Math.sin(pitch)*4;
+        playerVelocityY-=
+            1.3*dt;
 
-   camera.position.lerp(
-     new THREE.Vector3(
-       cx,cy,cz
-     ),
-     .15
-   );
+        player.position.y+=
+            playerVelocityY;
 
-   camera.lookAt(
-     me.position.x,
-     me.position.y+1.2,
-     me.position.z
-   );
- }
+        if(player.position.y<0){
 
- renderer.render(
-   scene,
-   camera
- );
+            player.position.y=0;
+            playerVelocityY=0;
+        }
+
+
+        botAI(dt);
+    }
+
+
+    updateEffects(dt);
+
+
+    // CAMERA
+
+    if(player){
+
+        const distance=7;
+
+        const cx=
+            player.position.x+
+            Math.sin(yaw)*distance;
+
+        const cz=
+            player.position.z+
+            Math.cos(yaw)*distance;
+
+        const cy=
+            player.position.y+
+            3+
+            Math.sin(pitch)*4;
+
+        camera.position.lerp(
+            new THREE.Vector3(
+                cx,cy,cz
+            ),
+            .12
+        );
+
+        camera.lookAt(
+            player.position.x,
+            player.position.y+1.2,
+            player.position.z
+        );
+
+    }
+
+
+    renderer.render(
+        scene,
+        camera
+    );
 
 }
 
+
+// ==================================================
+// RESIZE
+// ==================================================
+
 window.onresize=()=>{
 
- camera.aspect=
-   innerWidth/innerHeight;
+    if(!camera)return;
 
- camera.updateProjectionMatrix();
+    camera.aspect=
+        innerWidth/innerHeight;
 
- renderer.setSize(
-   innerWidth,
-   innerHeight
- );
+    camera.updateProjectionMatrix();
+
+    renderer.setSize(
+        innerWidth,
+        innerHeight
+    );
 
 };
 
-init();
-
 </script>
+
 </body>
 </html>
-`;
-
-// =============================
-// HTTP
-// =============================
-
-const server=http.createServer((req,res)=>{
-
- res.writeHead(200,{
-   "Content-Type":
-     "text/html; charset=utf-8"
- });
-
- res.end(HTML);
-
-});
-
-// =============================
-// WEBSOCKET
-// =============================
-
-const wss=new WebSocket.Server({
- server
-});
-
-wss.on("connection",ws=>{
-
- let me=null;
-
- send(ws,{
-   type:"welcome",
-   id:id()
- });
-
- ws.on("message",raw=>{
-
-   let m;
-
-   try{
-     m=JSON.parse(raw);
-   }catch{
-     return;
-   }
-
-   // CREATE
-
-   if(m.type==="create"){
-
-     if(me){
-       send(ws,{
-         type:"message",
-         text:"Bạn đã ở trong phòng!"
-       });
-       return;
-     }
-
-     me=player(
-       ws,
-       String(m.name||"Noob").slice(0,16)
-     );
-
-     const roomCode=code();
-
-     const room={
-       code:roomCode,
-       players:new Map(),
-       started:false
-     };
-
-     room.players.set(me.id,me);
-     me.room=room;
-
-     rooms.set(roomCode,room);
-
-     send(ws,{
-       type:"welcome",
-       id:me.id
-     });
-
-     send(ws,{
-       type:"room",
-       code:roomCode,
-       players:1
-     });
-
-     return;
-   }
-
-   // JOIN
-
-   if(m.type==="join"){
-
-     const room=
-       rooms.get(
-         String(m.code||"").toUpperCase()
-       );
-
-     if(!room){
-
-       send(ws,{
-         type:"message",
-         text:"❌ Không tìm thấy phòng!"
-       });
-
-       return;
-     }
-
-     if(room.players.size>=2){
-
-       send(ws,{
-         type:"message",
-         text:"❌ Phòng đã đầy!"
-       });
-
-       return;
-     }
-
-     me=player(
-       ws,
-       String(m.name||"Noob").slice(0,16)
-     );
-
-     room.players.set(me.id,me);
-
-     me.room=room;
-
-     const arr=[
-       ...room.players.values()
-     ];
-
-     arr[0].x=-3;
-     arr[0].z=0;
-
-     arr[1].x=3;
-     arr[1].z=0;
-
-     broadcast(room,{
-       type:"room",
-       code:room.code,
-       players:2
-     });
-
-     broadcast(room,{
-       type:"ready",
-       players:2,
-       ready:0
-     });
-
-     return;
-   }
-
-   if(!me)return;
-
-   const room=me.room;
-
-   if(m.type==="ready"){
-
-     if(!room)return;
-
-     me.ready=!me.ready;
-
-     const list=[
-       ...room.players.values()
-     ];
-
-     const ready=
-       list.filter(p=>p.ready).length;
-
-     broadcast(room,{
-       type:"ready",
-       players:list.length,
-       ready
-     });
-
-     if(
-       list.length===2 &&
-       ready===2 &&
-       !room.started
-     ){
-
-       let n=3;
-
-       const timer=setInterval(()=>{
-
-         broadcast(room,{
-           type:"countdown",
-           n
-         });
-
-         n--;
-
-         if(n<0){
-
-           clearInterval(timer);
-
-           room.started=true;
-
-           broadcast(room,{
-             type:"start"
-           });
-         }
-
-       },1000);
-
-     }
-
-   }
-
-   // MOVE
-
-   if(m.type==="move" &&
-      room &&
-      room.started){
-
-     let x=Number(m.x)||0;
-     let z=Number(m.z)||0;
-
-     const len=Math.hypot(x,z);
-
-     if(len>0){
-
-       x/=len;
-       z/=len;
-
-       me.x+=x*.35;
-       me.z+=z*.35;
-     }
-
-     me.x=Math.max(
-       -13,
-       Math.min(13,me.x)
-     );
-
-     me.z=Math.max(
-       -13,
-       Math.min(13,me.z)
-     );
-   }
-
-   // JUMP
-
-   if(m.type==="jump" &&
-      room &&
-      room.started){
-
-     if(me.y<=0.01){
-
-       me.vy=.42;
-     }
-   }
-
-   // ATTACK
-
-   if(m.type==="attack" &&
-      room &&
-      room.started){
-
-     for(const p of room.players.values()){
-
-       if(p.id===me.id)continue;
-
-       const dx=p.x-me.x;
-       const dz=p.z-me.z;
-
-       const distance=
-         Math.hypot(dx,dz);
-
-       if(distance<=2.8){
-
-         p.hp-=25;
-
-         if(p.hp<=0){
-
-           me.coins+=25;
-
-           p.hp=100;
-
-           me.x=-3;
-           me.z=0;
-
-           p.x=3;
-           p.z=0;
-
-           send(me.ws,{
-             type:"coins",
-             coins:me.coins
-           });
-
-           broadcast(room,{
-             type:"message",
-             text:
-               "💥 "+me.name+
-               " KO'd "+p.name+
-               " +25 coins!"
-           });
-
-         }
-
-         break;
-       }
-     }
-
-   }
-
-   // SHOP
-
-   if(m.type==="buy"){
-
-     const price={
-       noob:0,
-       red:50,
-       ninja:100,
-       gold:200
-     };
-
-     const skin=m.skin;
-
-     if(!(skin in price))return;
-
-     if(skin==="noob"){
-
-       me.skin="noob";
-
-       return;
-     }
-
-     if(me.coins<price[skin]){
-
-       send(me.ws,{
-         type:"message",
-         text:"❌ Không đủ coins!"
-       });
-
-       return;
-     }
-
-     me.coins-=price[skin];
-     me.skin=skin;
-
-     send(me.ws,{
-       type:"coins",
-       coins:me.coins
-     });
-
-     send(me.ws,{
-       type:"message",
-       text:
-         "✅ Đã mua "+skin.toUpperCase()
-     });
-
-   }
-
- });
-
- ws.on("close",()=>{
-
-   if(!me || !me.room)return;
-
-   const room=me.room;
-
-   room.players.delete(me.id);
-
-   if(room.players.size===0){
-
-     rooms.delete(room.code);
-
-   }else{
-
-     const other=
-       [...room.players.values()][0];
-
-     send(other.ws,{
-       type:"closed"
-     });
-
-     rooms.delete(room.code);
-   }
-
- });
-
-});
-
-// =============================
-// PHYSICS + STATE
-// =============================
-
-setInterval(()=>{
-
- for(const room of rooms.values()){
-
-   for(const p of room.players.values()){
-
-     if(room.started){
-
-       p.vy-=.025;
-       p.y+=p.vy;
-
-       if(p.y<0){
-
-         p.y=0;
-         p.vy=0;
-       }
-
-     }
-
-   }
-
-   const state={};
-
-   for(const p of room.players.values()){
-
-     state[p.id]={
-       id:p.id,
-       name:p.name,
-       x:p.x,
-       y:p.y,
-       z:p.z,
-       hp:p.hp,
-       coins:p.coins,
-       skin:p.skin
-     };
-
-   }
-
-   broadcast(room,{
-     type:"state",
-     players:state
-   });
-
- }
-
-},50);
-
-// =============================
-// START
-// =============================
-
-server.listen(PORT,()=>{
- console.log("");
- console.log("================================");
- console.log("⚔️ NOOB DUEL");
- console.log("================================");
- console.log("🌐 http://localhost:"+PORT);
- console.log("================================");
-});
